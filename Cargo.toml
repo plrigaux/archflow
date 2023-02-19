@@ -1,0 +1,35 @@
+[package]
+name = "zipstream"
+version = "0.4.0"
+edition = "2021"
+license = "MIT"
+readme = "README.md"
+description = "Create and stream a Zip archive into an AsyncWrite"
+categories = ["compression", "asynchronous", "web-programming"]
+keywords = ["io", "async", "non-blocking", "zip", "archive"]
+
+[lib]
+name = "zipstream"
+path = "src/lib.rs"
+
+
+[dependencies]
+tokio = { version = "1.25", features = ["io-util", "macros", "rt-multi-thread", "fs"]}
+crc32fast = "1.3"
+chrono = "0.4"
+async-compression = {version = "0.3.15", features = ["all-algorithms", "tokio"]}
+
+[dev-dependencies]
+tokio-util = { version = "0.7", default-features = false, features = ["io"] }
+hyper = { version = "0.14", default-features = false, features = ["tcp", "http1", "server", "stream"] }
+
+[[example]]
+name = "fs"
+path = "examples/fs.rs"
+
+
+[[example]]
+name = "hyper"
+path = "examples/hyper.rs"
+
+
