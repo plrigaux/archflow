@@ -340,6 +340,58 @@ impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
         W: AsyncWrite + Unpin,
         R: AsyncRead + Unpin,
     {
+        /*         let (date, time) = datetime.ms_dos();
+                let offset = self.written;
+                let mut header = header![
+                    FILE_HEADER_BASE_SIZE + name.len();
+                    0x04034b50u32,          // Local file header signature.
+                    10u16,                  // Version needed to extract.
+                    1u16 << 3 | 1 << 11,    // General purpose flag (temporary crc and sizes + UTF-8 filename).
+                    8u16,                   // Compression method (deflate).
+                    time,                   // Modification time.
+                    date,                   // Modification date.
+                    0u32,                   // Temporary CRC32.
+                    0u32,                   // Temporary compressed size.
+                    0u32,                   // Temporary uncompressed size.
+                    name.len() as u16,      // Filename length.
+                    0u16,                   // Extra field length.
+                ];
+                header.extend_from_slice(name.as_bytes()); // Filename.
+                self.sink.write_all(&header).await?;
+                self.written += header.len();
+        */
+        let mut total_read = 0;
+        let mut hasher = Hasher::new();
+        let mut buf = vec![0; 4096];
+        let (offset, date, time) = self.before_compress(&name, datetime).await?;
+
+        let cur_size = self.sink.compress_length;
+        let mut zencoder =
+            ZlibEncoder::with_quality(&mut self.sink, async_compression::Level::Best);
+
+        loop {
+            let read = reader.read(&mut buf).await?;
+            if read == 0 {
+                break;
+            }
+
+            total_read += read;
+            hasher.update(&buf[..read]);
+            zencoder.write_all(&buf[..read]).await?;
+            //self.sink.write_all(&buf[..read]).await?; // Payload chunk.
+        }
+        zencoder.shutdown().await?;
+
+        self.after_compress(total_read, cur_size, hasher, name, offset, date, time)
+            .await?;
+        Ok(())
+    }
+
+    async fn before_compress(
+        &mut self,
+        name: &str,
+        datetime: FileDateTime,
+    ) -> Result<(usize, u16, u16), IoError> {
         let (date, time) = datetime.ms_dos();
         let offset = self.written;
         let mut header = header![
@@ -360,31 +412,20 @@ impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
         self.sink.write_all(&header).await?;
         self.written += header.len();
 
-        let mut total_read = 0;
-        let mut hasher = Hasher::new();
-        let mut buf = vec![0; 4096];
+        Ok((offset, date, time))
+    }
 
-        /*        let mut encoder = ZlibEncoder::new(Vec::new());
-        encoder.write_all(in_data).await?;
-        encoder.shutdown().await?; */
-
-        let cur_size = self.sink.compress_length;
-        let mut zencoder =
-            ZlibEncoder::with_quality(&mut self.sink, async_compression::Level::Best);
-
-        loop {
-            let read = reader.read(&mut buf).await?;
-            if read == 0 {
-                break;
-            }
-
-            total_read += read;
-            hasher.update(&buf[..read]);
-            zencoder.write_all(&buf[..read]).await?;
-            //self.sink.write_all(&buf[..read]).await?; // Payload chunk.
-        }
-        zencoder.shutdown().await?;
-
+    #[allow(clippy::too_many_arguments)]
+    async fn after_compress(
+        &mut self,
+        total_read: usize,
+        cur_size: usize,
+        hasher: Hasher,
+        name: String,
+        offset: usize,
+        date: u16,
+        time: u16,
+    ) -> Result<(), IoError> {
         let total_compress = self.sink.compress_length - cur_size;
         println!("total_read {:?}", total_read);
         println!("total_compress {:?}", total_compress);
@@ -409,10 +450,8 @@ impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
             offset,
             datetime: (date, time),
         });
-
         Ok(())
     }
-
     /// Finalize the archive by writing the necessary metadata to the end of the archive.
     ///
     /// # Error
