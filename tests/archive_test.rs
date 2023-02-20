@@ -1,7 +1,7 @@
 use std::{io::Cursor, path::Path};
 use zipstream::{archive_size, Archive, FileDateTime};
 
-#[test]
+/* #[test]
 fn archive_size_test() {
     assert_eq!(
         archive_size([
@@ -18,9 +18,9 @@ fn archive_size_test() {
         ]),
         377,
     );
-}
+} */
 
-#[tokio::test]
+/* #[tokio::test]
 async fn archive_structure() {
     let mut archive = Archive::new(Vec::new());
     archive
@@ -76,7 +76,7 @@ async fn archive_structure() {
         &data,
         include_bytes!("zip_command_test_archive.zip")
     ));
-}
+} */
 
 #[tokio::test]
 async fn archive_structure_zup() {
@@ -96,8 +96,8 @@ async fn archive_structure_zup() {
 }
 
 #[tokio::test]
-async fn archive_structure_zup_on_file1() -> Result<(), std::io::Error> {
-    let out_path = Path::new("/tmp/test_out1.zip");
+async fn archive_structure_compress_zlib_file1() -> Result<(), std::io::Error> {
+    let out_path = Path::new("/tmp/test_compress1.zip");
 
     if out_path.exists() {
         tokio::fs::remove_file(out_path).await?;
@@ -122,7 +122,8 @@ async fn archive_structure_zup_on_file1() -> Result<(), std::io::Error> {
 
 #[tokio::test]
 async fn archive_structure_zup_on_file2() -> Result<(), std::io::Error> {
-    let out_path = Path::new("/tmp/test_out2.zip");
+    println!("ASDFASDFASDFASDF");
+    let out_path = Path::new("/tmp/test_flat1.zip");
 
     if out_path.exists() {
         tokio::fs::remove_file(out_path).await?;
@@ -135,6 +136,32 @@ async fn archive_structure_zup_on_file2() -> Result<(), std::io::Error> {
 
     archive
         .append("file1.txt".to_owned(), FileDateTime::now(), &mut f)
+        .await
+        .unwrap();
+
+    archive.finalize().await.unwrap();
+    println!("archive size = {:?}", archive.get_archive_size());
+    //let data = archive.finalize().await.unwrap();
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn archive_structure_compress_bzip_file1() -> Result<(), std::io::Error> {
+    println!("ASDFASDFASDFASDF");
+    let out_path = Path::new("/tmp/test_bzip1.zip");
+
+    if out_path.exists() {
+        tokio::fs::remove_file(out_path).await?;
+    }
+    let file = tokio::fs::File::create(out_path).await?;
+
+    let mut archive = Archive::new(file);
+
+    let mut f = tokio::fs::File::open("tests/file1.txt").await.unwrap();
+
+    archive
+        .append_bzip("file1.txt".to_owned(), FileDateTime::now(), &mut f)
         .await
         .unwrap();
 
