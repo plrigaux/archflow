@@ -102,10 +102,12 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 #[derive(Debug)]
 struct FileInfo {
     name: String,
-    size: usize,
+    compressed_size: u32, // Compressed size.
+    original_size: u32,
     crc: u32,
     offset: usize,
     datetime: (u16, u16),
+    compression_method: u16,
 }
 
 /// The (timezone-less) date and time that will be written in the archive alongside the file.
@@ -372,10 +374,12 @@ impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
 
         self.files_info.push(FileInfo {
             name,
-            size: total_read,
+            original_size: total_read as u32,
+            compressed_size: total_compress as u32,
             crc,
             offset,
             datetime: (date, time),
+            compression_method,
         });
 
         Ok(())
@@ -432,12 +436,12 @@ impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
                 0x031eu16,                      // Version made by.
                 10u16,                          // Version needed to extract.
                 1u16 << 3 | 1 << 11,            // General purpose flag (temporary crc and sizes + UTF-8 filename).
-                0u16,                           // Compression method (store).
+                file_info.compression_method,                           // Compression method .
                 file_info.datetime.1,           // Modification time.
                 file_info.datetime.0,           // Modification date.
                 file_info.crc,                  // CRC32.
-                file_info.size as u32,          // Compressed size.
-                file_info.size as u32,          // Uncompressed size.
+                file_info.compressed_size,          // Compressed size.
+                file_info.original_size,          // Uncompressed size.
                 file_info.name.len() as u16,    // Filename length.
                 0u16,                           // Extra field length.
                 0u16,                           // File comment length.
