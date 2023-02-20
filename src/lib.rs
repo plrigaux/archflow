@@ -2,14 +2,13 @@ use std::future::Future;
 use std::io::Error as IoError;
 use std::mem::size_of;
 
-use async_compression::tokio::write::{BzEncoder, ZlibEncoder};
-
 use async_write_wrapper::AsyncWriteWrapper;
 use chrono::{DateTime, Datelike, Local, TimeZone, Timelike};
 
+use compression::Compressor;
 use crc32fast::Hasher;
 
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 
 pub mod async_write_wrapper;
 mod compression;
@@ -181,41 +180,10 @@ impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
         W: AsyncWrite + Unpin,
         R: AsyncRead + Unpin,
     {
-        self.append_base(name, datetime, reader, 0, Self::compress_store)
+        self.append_base(name, datetime, reader, Compressor::Storer())
             .await?;
 
         Ok(())
-    }
-
-    async fn compress_store<A, R>(
-        writter: &mut AsyncWriteWrapper<A>,
-        reader: &mut R,
-        hasher: &mut Hasher,
-    ) -> Result<usize, IoError>
-    where
-        A: AsyncWrite + Unpin,
-        R: AsyncRead + Unpin,
-    {
-        //let mut zencoder = ZlibEncoder::with_quality(w, async_compression::Level::Best);
-
-        let mut buf = vec![0; 4096];
-        let mut total_read = 0;
-
-        loop {
-            let read = reader.read(&mut buf).await?;
-            if read == 0 {
-                break;
-            }
-
-            total_read += read;
-            hasher.update(&buf[..read]);
-            writter.write_all(&buf[..read]).await?;
-            //self.sink.write_all(&buf[..read]).await?; // Payload chunk.
-        }
-        //w.flush().await?;
-        //w.shutdown().await?;
-
-        Ok(total_read)
     }
 
     pub async fn appendzip<R>(
@@ -228,7 +196,7 @@ impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
         W: AsyncWrite + Unpin,
         R: AsyncRead + Unpin,
     {
-        self.append_base(name, datetime, reader, 8, Self::compress_zip)
+        self.append_base(name, datetime, reader, Compressor::Deflater())
             .await?;
         Ok(())
     }
@@ -243,31 +211,25 @@ impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
         W: AsyncWrite + Unpin,
         R: AsyncRead + Unpin,
     {
-        self.append_base(name, datetime, reader, 12, Self::compress_bzip)
+        self.append_base(name, datetime, reader, Compressor::BZip2())
             .await?;
         Ok(())
     }
 
-    async fn append_base<R, F>(
+    async fn append_base<R>(
         &mut self,
         name: String,
         datetime: FileDateTime,
         reader: &mut R,
-        compression_method: u16,
-        compressor: F,
+        compressor: Compressor,
     ) -> Result<(), IoError>
     where
         W: AsyncWrite + Unpin,
         R: AsyncRead + Unpin,
-        F: for<'a> AsyncFn<
-            &'a mut AsyncWriteWrapper<W>,
-            &'a mut R,
-            &'a mut Hasher,
-            Output = Result<usize, IoError>,
-        >,
     {
         let (date, time) = datetime.ms_dos();
         let offset = self.written;
+        let compression_method = compressor.compression_method();
         let mut header = header![
             FILE_HEADER_BASE_SIZE + name.len();
             0x04034b50u32,          // Local file header signature.
@@ -289,7 +251,9 @@ impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
         let mut hasher = Hasher::new();
         let cur_size = self.sink.get_compress_length();
 
-        let total_read = compressor(&mut self.sink, reader, &mut hasher).await?;
+        let total_read = compressor
+            .compress(&mut self.sink, reader, &mut hasher)
+            .await?;
 
         //self.sink.flush().await?;
         let total_compress = self.sink.get_compress_length() - cur_size;
@@ -334,66 +298,6 @@ impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
         Ok(())
     }
 
-    async fn compress_zip<A, R>(
-        w: &mut AsyncWriteWrapper<A>,
-        reader: &mut R,
-        hasher: &mut Hasher,
-    ) -> Result<usize, IoError>
-    where
-        A: AsyncWrite + Unpin,
-        R: AsyncRead + Unpin,
-    {
-        let mut zencoder = ZlibEncoder::new(w);
-
-        let mut buf = vec![0; 4096];
-        let mut total_read = 0;
-
-        loop {
-            let read = reader.read(&mut buf).await?;
-            if read == 0 {
-                break;
-            }
-
-            total_read += read;
-            hasher.update(&buf[..read]);
-            zencoder.write_all(&buf[..read]).await?;
-            //self.sink.write_all(&buf[..read]).await?; // Payload chunk.
-        }
-        zencoder.flush().await?;
-        zencoder.shutdown().await?;
-
-        Ok(total_read)
-    }
-
-    async fn compress_bzip<A, R>(
-        w: &mut AsyncWriteWrapper<A>,
-        reader: &mut R,
-        hasher: &mut Hasher,
-    ) -> Result<usize, IoError>
-    where
-        A: AsyncWrite + Unpin,
-        R: AsyncRead + Unpin,
-    {
-        let mut zencoder = BzEncoder::new(w);
-
-        let mut buf = vec![0; 4096];
-        let mut total_read = 0;
-
-        loop {
-            let read = reader.read(&mut buf).await?;
-            if read == 0 {
-                break;
-            }
-
-            total_read += read;
-            hasher.update(&buf[..read]);
-            zencoder.write_all(&buf[..read]).await?;
-            //self.sink.write_all(&buf[..read]).await?; // Payload chunk.
-        }
-        zencoder.shutdown().await?;
-
-        Ok(total_read)
-    }
     /// Finalize the archive by writing the necessary metadata to the end of the archive.
     ///
     /// # Error

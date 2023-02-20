@@ -848,6 +848,7 @@ dependencies = [
  "async-compression",
  "chrono",
  "crc32fast",
+ "flate2",
  "hyper",
  "tokio",
  "tokio-util",
