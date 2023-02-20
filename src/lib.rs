@@ -88,11 +88,9 @@
 //!         .body(Body::wrap_stream(ReaderStream::new(r)))
 //! }
 //! ```
+use std::future::Future;
 use std::mem::size_of;
 use std::{io::Error as IoError, pin::Pin};
-
-#[cfg(all(feature = "futures-async-io", feature = "tokio-async-io"))]
-compile_error!("features futures-async-io and tokio-async-io are mutually exclusive");
 
 use async_compression::tokio::write::ZlibEncoder;
 use chrono::{DateTime, Datelike, Local, TimeZone, Timelike};
@@ -217,7 +215,7 @@ const END_OF_CENTRAL_DIRECTORY_SIZE: usize = 5 * size_of::<u16>() + 3 * size_of:
 /// ```
 #[derive(Debug)]
 pub struct Archive<W: tokio::io::AsyncWrite + Unpin> {
-    sink: MyStruct<W>,
+    sink: AsyncWriteWrapper<W>,
     files_info: Vec<FileInfo>,
     pub written: usize,
 }
@@ -227,7 +225,7 @@ impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
     pub fn new(sink_: W) -> Self {
         //let buf = BufWriter::new(sink_);
         Self {
-            sink: MyStruct::new(sink_),
+            sink: AsyncWriteWrapper::new(sink_),
             files_info: Vec::new(),
             written: 0,
         }
@@ -262,29 +260,26 @@ impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
         W: AsyncWrite + Unpin,
         R: AsyncRead + Unpin,
     {
-        let (date, time) = datetime.ms_dos();
-        let offset = self.written;
-        let mut header = header![
-            FILE_HEADER_BASE_SIZE + name.len();
-            0x04034b50u32,          // Local file header signature.
-            10u16,                  // Version needed to extract.
-            1u16 << 3 | 1 << 11,    // General purpose flag (temporary crc and sizes + UTF-8 filename).
-            0u16,                   // Compression method (store).
-            time,                   // Modification time.
-            date,                   // Modification date.
-            0u32,                   // Temporary CRC32.
-            0u32,                   // Temporary compressed size.
-            0u32,                   // Temporary uncompressed size.
-            name.len() as u16,      // Filename length.
-            0u16,                   // Extra field length.
-        ];
-        header.extend_from_slice(name.as_bytes()); // Filename.
-        self.sink.write_all(&header).await?;
-        self.written += header.len();
+        self.append_base(name, datetime, reader, 0, Self::compress_store)
+            .await?;
 
-        let mut total_read = 0;
-        let mut hasher = Hasher::new();
+        Ok(())
+    }
+
+    async fn compress_store<A, R>(
+        w: &mut AsyncWriteWrapper<A>,
+        reader: &mut R,
+        hasher: &mut Hasher,
+    ) -> Result<usize, IoError>
+    where
+        A: AsyncWrite + Unpin,
+        R: AsyncRead + Unpin,
+    {
+        //let mut zencoder = ZlibEncoder::with_quality(w, async_compression::Level::Best);
+
         let mut buf = vec![0; 4096];
+        let mut total_read = 0;
+
         loop {
             let read = reader.read(&mut buf).await?;
             if read == 0 {
@@ -293,43 +288,14 @@ impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
 
             total_read += read;
             hasher.update(&buf[..read]);
-            self.sink.write_all(&buf[..read]).await?; // Payload chunk.
+            w.write_all(&buf[..read]).await?;
+            //self.sink.write_all(&buf[..read]).await?; // Payload chunk.
         }
-        let crc = hasher.finalize();
-        self.written += total_read;
+        w.shutdown().await?;
 
-        let descriptor = header![
-            DESCRIPTOR_SIZE;
-            0x08074b50u32,      // Data descriptor signature.
-            crc,                // CRC32.
-            total_read as u32,  // Compressed size.
-            total_read as u32,  // Uncompressed size.
-        ];
-        self.sink.write_all(&descriptor).await?;
-        self.written += descriptor.len();
-
-        self.files_info.push(FileInfo {
-            name,
-            size: total_read,
-            crc,
-            offset,
-            datetime: (date, time),
-        });
-
-        Ok(())
+        Ok(total_read)
     }
 
-    /// Append a new file to the archive using the provided name, date/time and `AsyncRead` object.  
-    /// Filename must be valid UTF-8. Some (very) old zip utilities might mess up filenames during extraction if they contain non-ascii characters.  
-    /// File's payload is not compressed and is given `rw-r--r--` permissions.
-    ///
-    /// # Error
-    ///
-    /// This function will forward any error found while trying to read from the file stream or while writing to the underlying sink.
-    ///
-    /// # Features
-    ///
-    /// Requires `tokio-async-io` feature. `futures-async-io` is also available.
     pub async fn appendzip<R>(
         &mut self,
         name: String,
@@ -340,58 +306,29 @@ impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
         W: AsyncWrite + Unpin,
         R: AsyncRead + Unpin,
     {
-        /*         let (date, time) = datetime.ms_dos();
-                let offset = self.written;
-                let mut header = header![
-                    FILE_HEADER_BASE_SIZE + name.len();
-                    0x04034b50u32,          // Local file header signature.
-                    10u16,                  // Version needed to extract.
-                    1u16 << 3 | 1 << 11,    // General purpose flag (temporary crc and sizes + UTF-8 filename).
-                    8u16,                   // Compression method (deflate).
-                    time,                   // Modification time.
-                    date,                   // Modification date.
-                    0u32,                   // Temporary CRC32.
-                    0u32,                   // Temporary compressed size.
-                    0u32,                   // Temporary uncompressed size.
-                    name.len() as u16,      // Filename length.
-                    0u16,                   // Extra field length.
-                ];
-                header.extend_from_slice(name.as_bytes()); // Filename.
-                self.sink.write_all(&header).await?;
-                self.written += header.len();
-        */
-        let mut total_read = 0;
-        let mut hasher = Hasher::new();
-        let mut buf = vec![0; 4096];
-        let (offset, date, time) = self.before_compress(&name, datetime).await?;
-
-        let cur_size = self.sink.compress_length;
-        let mut zencoder =
-            ZlibEncoder::with_quality(&mut self.sink, async_compression::Level::Best);
-
-        loop {
-            let read = reader.read(&mut buf).await?;
-            if read == 0 {
-                break;
-            }
-
-            total_read += read;
-            hasher.update(&buf[..read]);
-            zencoder.write_all(&buf[..read]).await?;
-            //self.sink.write_all(&buf[..read]).await?; // Payload chunk.
-        }
-        zencoder.shutdown().await?;
-
-        self.after_compress(total_read, cur_size, hasher, name, offset, date, time)
+        self.append_base(name, datetime, reader, 8, Self::compress_zip)
             .await?;
         Ok(())
     }
 
-    async fn before_compress(
+    async fn append_base<R, F>(
         &mut self,
-        name: &str,
+        name: String,
         datetime: FileDateTime,
-    ) -> Result<(usize, u16, u16), IoError> {
+        reader: &mut R,
+        compression_method: u16,
+        compressor: F,
+    ) -> Result<(), IoError>
+    where
+        W: AsyncWrite + Unpin,
+        R: AsyncRead + Unpin,
+        F: for<'a> AsyncFn<
+            &'a mut AsyncWriteWrapper<W>,
+            &'a mut R,
+            &'a mut Hasher,
+            Output = Result<usize, IoError>,
+        >,
+    {
         let (date, time) = datetime.ms_dos();
         let offset = self.written;
         let mut header = header![
@@ -399,7 +336,7 @@ impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
             0x04034b50u32,          // Local file header signature.
             10u16,                  // Version needed to extract.
             1u16 << 3 | 1 << 11,    // General purpose flag (temporary crc and sizes + UTF-8 filename).
-            8u16,                   // Compression method (deflate).
+            compression_method,     // Compression method .
             time,                   // Modification time.
             date,                   // Modification date.
             0u32,                   // Temporary CRC32.
@@ -411,21 +348,11 @@ impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
         header.extend_from_slice(name.as_bytes()); // Filename.
         self.sink.write_all(&header).await?;
         self.written += header.len();
+        let mut hasher = Hasher::new();
+        let cur_size = self.sink.compress_length;
 
-        Ok((offset, date, time))
-    }
+        let total_read = compressor(&mut self.sink, reader, &mut hasher).await?;
 
-    #[allow(clippy::too_many_arguments)]
-    async fn after_compress(
-        &mut self,
-        total_read: usize,
-        cur_size: usize,
-        hasher: Hasher,
-        name: String,
-        offset: usize,
-        date: u16,
-        time: u16,
-    ) -> Result<(), IoError> {
         let total_compress = self.sink.compress_length - cur_size;
         println!("total_read {:?}", total_read);
         println!("total_compress {:?}", total_compress);
@@ -450,8 +377,40 @@ impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
             offset,
             datetime: (date, time),
         });
+
         Ok(())
     }
+
+    async fn compress_zip<A, R>(
+        w: &mut AsyncWriteWrapper<A>,
+        reader: &mut R,
+        hasher: &mut Hasher,
+    ) -> Result<usize, IoError>
+    where
+        A: AsyncWrite + Unpin,
+        R: AsyncRead + Unpin,
+    {
+        let mut zencoder = ZlibEncoder::with_quality(w, async_compression::Level::Best);
+
+        let mut buf = vec![0; 4096];
+        let mut total_read = 0;
+
+        loop {
+            let read = reader.read(&mut buf).await?;
+            if read == 0 {
+                break;
+            }
+
+            total_read += read;
+            hasher.update(&buf[..read]);
+            zencoder.write_all(&buf[..read]).await?;
+            //self.sink.write_all(&buf[..read]).await?; // Payload chunk.
+        }
+        zencoder.shutdown().await?;
+
+        Ok(total_read)
+    }
+
     /// Finalize the archive by writing the necessary metadata to the end of the archive.
     ///
     /// # Error
@@ -541,13 +500,13 @@ pub fn archive_size<'a, I: IntoIterator<Item = (&'a str, usize)>>(files: I) -> u
 }
 
 #[derive(Debug)]
-struct MyStruct<W: AsyncWrite + Unpin> {
+struct AsyncWriteWrapper<W: AsyncWrite + Unpin> {
     writer: W,
     compress_length: usize,
 }
 
-impl<W: AsyncWrite + Unpin> MyStruct<W> {
-    fn new(w: W) -> MyStruct<W> {
+impl<W: AsyncWrite + Unpin> AsyncWriteWrapper<W> {
+    fn new(w: W) -> AsyncWriteWrapper<W> {
         Self {
             writer: w,
             compress_length: 0,
@@ -555,7 +514,7 @@ impl<W: AsyncWrite + Unpin> MyStruct<W> {
     }
 }
 
-impl<W: AsyncWrite + Unpin> AsyncWrite for MyStruct<W> {
+impl<W: AsyncWrite + Unpin> AsyncWrite for AsyncWriteWrapper<W> {
     fn poll_write(
         self: Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
@@ -579,4 +538,18 @@ impl<W: AsyncWrite + Unpin> AsyncWrite for MyStruct<W> {
     ) -> std::task::Poll<Result<(), std::io::Error>> {
         Pin::new(&mut self.get_mut().writer).poll_shutdown(cx)
     }
+}
+
+trait AsyncFn<T, U, V>: Fn(T, U, V) -> <Self as AsyncFn<T, U, V>>::Fut {
+    type Fut: Future<Output = <Self as AsyncFn<T, U, V>>::Output>;
+    type Output;
+}
+
+impl<T, U, V, F, Fut> AsyncFn<T, U, V> for F
+where
+    F: Fn(T, U, V) -> Fut,
+    Fut: Future,
+{
+    type Fut = Fut;
+    type Output = Fut::Output;
 }
