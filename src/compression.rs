@@ -20,7 +20,7 @@ pub const XZ: u16 = 95;
 pub enum Compressor {
     Storer(),
     Deflater(),
-    Deflater_Fate2(),
+    DeflaterFate2(),
     BZip2(),
 }
 
@@ -30,7 +30,7 @@ impl Compressor {
             Compressor::Storer() => STORE,
             Compressor::Deflater() => DEFALTE,
             Compressor::BZip2() => BZIP2,
-            Compressor::Deflater_Fate2() => DEFALTE,
+            Compressor::DeflaterFate2() => DEFALTE,
         }
     }
 
@@ -109,7 +109,7 @@ impl Compressor {
                 Ok(total_read)
             }
 
-            Compressor::Deflater_Fate2() => {
+            Compressor::DeflaterFate2() => {
                 let mut zencoder = ZlibEncoderFlate::new(Vec::new(), Compression::default());
 
                 let mut buf = vec![0; 4096];

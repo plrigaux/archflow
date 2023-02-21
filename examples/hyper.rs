@@ -3,7 +3,8 @@ use hyper::{header, Body, Request, Response, Server, StatusCode};
 use std::io::Cursor;
 use tokio::io::duplex;
 use tokio_util::io::ReaderStream;
-use zipstream::{archive_size, Archive, FileDateTime};
+use zipstream::archive::{Archive, FileDateTime};
+use zipstream::tools::archive_size;
 
 async fn zip_archive(_req: Request<Body>) -> Result<Response<Body>, hyper::http::Error> {
     let (filename_1, mut fd_1) = (String::from("file1.txt"), Cursor::new(b"hello\n".to_vec()));

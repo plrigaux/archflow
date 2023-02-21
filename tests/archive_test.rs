@@ -1,7 +1,10 @@
-use std::{io::Cursor, path::Path};
-use zipstream::{archive_size, Archive, FileDateTime};
-
-/* #[test]
+use std::io::Cursor;
+use std::path::Path;
+use zipstream::{
+    archive::{Archive, FileDateTime},
+    tools::archive_size,
+};
+#[test]
 fn archive_size_test() {
     assert_eq!(
         archive_size([
@@ -18,9 +21,9 @@ fn archive_size_test() {
         ]),
         377,
     );
-} */
+}
 
-/* #[tokio::test]
+#[tokio::test]
 async fn archive_structure() {
     let mut archive = Archive::new(Vec::new());
     archive
@@ -76,7 +79,7 @@ async fn archive_structure() {
         &data,
         include_bytes!("zip_command_test_archive.zip")
     ));
-} */
+}
 
 #[tokio::test]
 async fn archive_structure_zup() {
