@@ -1,11 +1,7 @@
-use std::io::{Cursor, Read};
+use std::io::Read;
 use std::path::Path;
 use std::{fs::File, io::Write};
 use zip::{write::FileOptions, ZipWriter};
-use zipstream::{
-    archive::{Archive, FileDateTime},
-    tools::archive_size,
-};
 
 fn create_new_clean_file_std(file_name: &str) -> std::fs::File {
     let dir_prefix = "/tmp/zipstream";

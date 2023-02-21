@@ -154,21 +154,6 @@ impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
     /// # Features
     ///
     /// Requires `tokio-async-io` feature. `futures-async-io` is also available.
-    pub async fn append<R>(
-        &mut self,
-        name: String,
-        datetime: FileDateTime,
-        reader: &mut R,
-    ) -> Result<(), IoError>
-    where
-        W: AsyncWrite + Unpin,
-        R: AsyncRead + Unpin,
-    {
-        self.append_base(name, datetime, reader, Compressor::Storer())
-            .await?;
-
-        Ok(())
-    }
 
     pub async fn append_file<R>(
         &mut self,
@@ -181,45 +166,15 @@ impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
         W: AsyncWrite + Unpin,
         R: AsyncRead + Unpin,
     {
-        self.append_base(file_name.to_owned(), datetime, reader, compressor)
+        self.append_base(file_name, datetime, reader, compressor)
             .await?;
 
-        Ok(())
-    }
-
-    pub async fn appendzip<R>(
-        &mut self,
-        name: String,
-        datetime: FileDateTime,
-        reader: &mut R,
-    ) -> Result<(), IoError>
-    where
-        W: AsyncWrite + Unpin,
-        R: AsyncRead + Unpin,
-    {
-        self.append_base(name, datetime, reader, Compressor::Deflater())
-            .await?;
-        Ok(())
-    }
-
-    pub async fn append_bzip<R>(
-        &mut self,
-        name: String,
-        datetime: FileDateTime,
-        reader: &mut R,
-    ) -> Result<(), IoError>
-    where
-        W: AsyncWrite + Unpin,
-        R: AsyncRead + Unpin,
-    {
-        self.append_base(name, datetime, reader, Compressor::BZip2())
-            .await?;
         Ok(())
     }
 
     async fn append_base<R>(
         &mut self,
-        name: String,
+        file_name: &str,
         datetime: FileDateTime,
         reader: &mut R,
         compressor: Compressor,
@@ -233,8 +188,10 @@ impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
 
         let compression_method = compressor.compression_method();
 
+        let file_len = file_name.as_bytes().len();
+
         let mut header = header![
-            FILE_HEADER_BASE_SIZE + name.len();
+            FILE_HEADER_BASE_SIZE + file_len;
             0x04034b50u32,          // Local file header signature.
             compressor.version_needed(),                  // Version needed to extract.
             1u16 << 3 | 1 << 11,    // General purpose flag (temporary crc and sizes + UTF-8 filename).
@@ -244,10 +201,10 @@ impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
             0u32,                   // Temporary CRC32.
             0u32,                   // Temporary compressed size.
             0u32,                   // Temporary uncompressed size.
-            name.len() as u16,      // Filename length.
+            file_len as u16,      // Filename length.
             0u16,                   // Extra field length.
         ];
-        header.extend_from_slice(name.as_bytes()); // Filename.
+        header.extend_from_slice(file_name.as_bytes()); // Filename.
         self.sink.write_all(&header).await?;
         //self.sink.flush().await?;
         self.update_written(header.len() as u32);
@@ -260,19 +217,7 @@ impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
 
         //self.sink.flush().await?;
         let total_compress = self.sink.get_compress_length() - cur_size;
-        //println!("total_read {:?}", total_read);
-        /*         println!(
-            "total_compress {:?}, written: {:?} cur_size {:?}",
-            total_compress,
-            self.sink.get_compress_length(),
-            cur_size
-        ); */
 
-        /*         println!(
-            "read - compress = save {:?} bytes",
-            (total_read as i64) - (total_compress as i64)
-        ); */
-        //self.update_written(total_read as u32);
         self.update_written(total_compress as u32);
 
         let crc = hasher.finalize();
@@ -289,7 +234,7 @@ impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
         self.update_written(descriptor.len() as u32);
 
         self.files_info.push(ArchiveFileEntry {
-            name,
+            name: file_name.to_owned(),
             original_size: total_read as u32,
             compressed_size: total_compress as u32,
             crc,

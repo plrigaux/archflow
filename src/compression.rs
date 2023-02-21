@@ -1,6 +1,8 @@
 use crate::async_write_wrapper::AsyncWriteWrapper;
 use async_compression::tokio::write::BzEncoder;
+use async_compression::tokio::write::XzEncoder;
 use async_compression::tokio::write::ZlibEncoder;
+use async_compression::tokio::write::ZstdEncoder;
 use crc32fast::Hasher;
 use flate2::write::ZlibEncoder as ZlibEncoderFlate;
 use flate2::Compression;
@@ -19,19 +21,23 @@ pub const XZ: u16 = 95;
 
 #[derive(Debug)]
 pub enum Compressor {
-    Storer(),
-    Deflater(),
-    DeflaterFate2(),
+    Store(),
+    Deflated(),
+    DeflatedFate2(),
     BZip2(),
+    Zstd(),
+    Xz(),
 }
 
 impl Compressor {
     pub fn compression_method(&self) -> u16 {
         match self {
-            Compressor::Storer() => STORE,
-            Compressor::Deflater() => DEFALTE,
+            Compressor::Store() => STORE,
+            Compressor::Deflated() => DEFALTE,
             Compressor::BZip2() => BZIP2,
-            Compressor::DeflaterFate2() => DEFALTE,
+            Compressor::DeflatedFate2() => DEFALTE,
+            Compressor::Zstd() => ZSTD,
+            Compressor::Xz() => XZ,
         }
     }
 
@@ -54,7 +60,7 @@ impl Compressor {
         W: AsyncWrite + Unpin,
     {
         match self {
-            Compressor::Storer() => {
+            Compressor::Store() => {
                 let mut buf = vec![0; 4096];
                 let mut total_read = 0;
 
@@ -74,7 +80,7 @@ impl Compressor {
 
                 Ok(total_read)
             }
-            Compressor::Deflater() => {
+            Compressor::Deflated() => {
                 let mut zencoder = ZlibEncoder::new(writter);
 
                 let mut buf = vec![0; 4096];
@@ -118,7 +124,7 @@ impl Compressor {
                 Ok(total_read)
             }
 
-            Compressor::DeflaterFate2() => {
+            Compressor::DeflatedFate2() => {
                 //TODO chage vec to stream
                 let mut zencoder = ZlibEncoderFlate::new(Vec::new(), Compression::default());
 
@@ -139,6 +145,49 @@ impl Compressor {
                 let hello = zencoder.finish()?;
 
                 writter.write_all(&hello).await?;
+
+                Ok(total_read)
+            }
+
+            Compressor::Zstd() => {
+                let mut zencoder = ZstdEncoder::new(writter);
+
+                let mut buf = vec![0; 4096];
+                let mut total_read = 0;
+
+                loop {
+                    let read = reader.read(&mut buf).await?;
+                    if read == 0 {
+                        break;
+                    }
+
+                    total_read += read;
+                    hasher.update(&buf[..read]);
+                    zencoder.write_all(&buf[..read]).await?;
+                    //self.sink.write_all(&buf[..read]).await?; // Payload chunk.
+                }
+                zencoder.shutdown().await?;
+
+                Ok(total_read)
+            }
+            Compressor::Xz() => {
+                let mut zencoder = XzEncoder::new(writter);
+
+                let mut buf = vec![0; 4096];
+                let mut total_read = 0;
+
+                loop {
+                    let read = reader.read(&mut buf).await?;
+                    if read == 0 {
+                        break;
+                    }
+
+                    total_read += read;
+                    hasher.update(&buf[..read]);
+                    zencoder.write_all(&buf[..read]).await?;
+                    //self.sink.write_all(&buf[..read]).await?; // Payload chunk.
+                }
+                zencoder.shutdown().await?;
 
                 Ok(total_read)
             }

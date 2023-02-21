@@ -1,23 +1,28 @@
 use std::io::Cursor;
 use tokio::fs::File;
-use zipstream::archive::{Archive, FileDateTime};
+use zipstream::{
+    archive::{Archive, FileDateTime},
+    compression::Compressor,
+};
 
 #[tokio::main]
 async fn main() {
     let file = File::create("archive.zip").await.unwrap();
     let mut archive = Archive::new(file);
     archive
-        .append(
-            "file1.txt".to_owned(),
+        .append_file(
+            "file1.txt",
             FileDateTime::now(),
+            Compressor::Store(),
             &mut Cursor::new(b"hello\n"),
         )
         .await
         .unwrap();
     archive
-        .append(
-            "file2.txt".to_owned(),
+        .append_file(
+            "file2.txt",
             FileDateTime::now(),
+            Compressor::Store(),
             &mut Cursor::new(b"world\n".to_vec()),
         )
         .await
