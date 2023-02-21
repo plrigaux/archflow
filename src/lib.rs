@@ -1,7 +1,7 @@
 use std::future::Future;
 pub mod archive;
 pub mod async_write_wrapper;
-mod compression;
+pub mod compression;
 mod constants;
 pub mod tools;
 

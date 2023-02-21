@@ -23,6 +23,7 @@ flate2 = "1.0"
 [dev-dependencies]
 tokio-util = { version = "0.7", default-features = false, features = ["io"] }
 hyper = { version = "0.14", default-features = false, features = ["tcp", "http1", "server", "stream"] }
+zip = "0.6.4"
 
 [[example]]
 name = "fs"

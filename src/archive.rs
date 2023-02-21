@@ -12,14 +12,32 @@ use crate::constants::{
 use std::io::Error as IoError;
 
 #[derive(Debug)]
-struct FileInfo {
+struct ArchiveFileEntry {
     name: String,
     compressed_size: u32, // Compressed size.
     original_size: u32,
     crc: u32,
     offset: u32,
     datetime: (u16, u16),
-    compression_method: u16,
+    compressor: Compressor,
+}
+
+pub const DEFAULT_VERSION: u8 = 46;
+pub const UNIX: u8 = 3;
+pub const VERSION_MADE_BY: u16 = (UNIX as u16) << 8 | DEFAULT_VERSION as u16;
+
+impl ArchiveFileEntry {
+    pub fn version_needed(&self) -> u16 {
+        // higher versions matched first
+        match self.compressor {
+            Compressor::BZip2() => 46,
+            _ => 20,
+        }
+    }
+
+    pub fn version_made_by(&self) -> u16 {
+        VERSION_MADE_BY
+    }
 }
 
 /// The (timezone-less) date and time that will be written in the archive alongside the file.
@@ -98,7 +116,7 @@ macro_rules! header {
 #[derive(Debug)]
 pub struct Archive<W: tokio::io::AsyncWrite + Unpin> {
     sink: AsyncWriteWrapper<W>,
-    files_info: Vec<FileInfo>,
+    files_info: Vec<ArchiveFileEntry>,
     written: u32,
 }
 
@@ -122,7 +140,7 @@ impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
     }
 
     pub fn update_written(&mut self, nb_bytes: u32) {
-        println!("written bytes: {}", nb_bytes);
+        //println!("written bytes: {}", nb_bytes);
         self.written += nb_bytes;
     }
     /// Append a new file to the archive using the provided name, date/time and `AsyncRead` object.  
@@ -147,6 +165,23 @@ impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
         R: AsyncRead + Unpin,
     {
         self.append_base(name, datetime, reader, Compressor::Storer())
+            .await?;
+
+        Ok(())
+    }
+
+    pub async fn append_file<R>(
+        &mut self,
+        file_name: &str,
+        datetime: FileDateTime,
+        compressor: Compressor,
+        reader: &mut R,
+    ) -> Result<(), IoError>
+    where
+        W: AsyncWrite + Unpin,
+        R: AsyncRead + Unpin,
+    {
+        self.append_base(file_name.to_owned(), datetime, reader, compressor)
             .await?;
 
         Ok(())
@@ -195,11 +230,13 @@ impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
     {
         let (date, time) = datetime.ms_dos();
         let offset = self.written;
+
         let compression_method = compressor.compression_method();
+
         let mut header = header![
             FILE_HEADER_BASE_SIZE + name.len();
             0x04034b50u32,          // Local file header signature.
-            10u16,                  // Version needed to extract.
+            compressor.version_needed(),                  // Version needed to extract.
             1u16 << 3 | 1 << 11,    // General purpose flag (temporary crc and sizes + UTF-8 filename).
             compression_method,     // Compression method .
             time,                   // Modification time.
@@ -223,18 +260,18 @@ impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
 
         //self.sink.flush().await?;
         let total_compress = self.sink.get_compress_length() - cur_size;
-        println!("total_read {:?}", total_read);
-        println!(
+        //println!("total_read {:?}", total_read);
+        /*         println!(
             "total_compress {:?}, written: {:?} cur_size {:?}",
             total_compress,
             self.sink.get_compress_length(),
             cur_size
-        );
+        ); */
 
-        println!(
+        /*         println!(
             "read - compress = save {:?} bytes",
             (total_read as i64) - (total_compress as i64)
-        );
+        ); */
         //self.update_written(total_read as u32);
         self.update_written(total_compress as u32);
 
@@ -251,14 +288,14 @@ impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
 
         self.update_written(descriptor.len() as u32);
 
-        self.files_info.push(FileInfo {
+        self.files_info.push(ArchiveFileEntry {
             name,
             original_size: total_read as u32,
             compressed_size: total_compress as u32,
             crc,
             offset,
             datetime: (date, time),
-            compression_method,
+            compressor,
         });
 
         Ok(())
@@ -282,10 +319,10 @@ impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
             let mut entry = header![
                 CENTRAL_DIRECTORY_ENTRY_BASE_SIZE + file_info.name.len();
                 CENTRAL_DIRECTORY_ENTRY_SIGNATURE,                  // Central directory entry signature.
-                0x031eu16,                      // Version made by.
-                10u16,                          // Version needed to extract.
+                file_info.version_made_by(),                      // Version made by.
+                file_info.version_needed(),                          // Version needed to extract.
                 1u16 << 3 | 1 << 11,            // General purpose flag (temporary crc and sizes + UTF-8 filename).
-                file_info.compression_method,                           // Compression method .
+                file_info.compressor.compression_method(),       // Compression method .
                 file_info.datetime.1,           // Modification time.
                 file_info.datetime.0,           // Modification date.
                 file_info.crc,                  // CRC32.
@@ -329,7 +366,7 @@ impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
 
         dir_end.write(&mut self.sink).await?;
 
-        println!("CentralDirectoryEnd {:#?}", dir_end);
+        //println!("CentralDirectoryEnd {:#?}", dir_end);
         Ok(())
     }
 }

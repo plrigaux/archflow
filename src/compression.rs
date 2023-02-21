@@ -17,6 +17,7 @@ pub const DEFALTE: u16 = 8;
 pub const ZSTD: u16 = 93;
 pub const XZ: u16 = 95;
 
+#[derive(Debug)]
 pub enum Compressor {
     Storer(),
     Deflater(),
@@ -31,6 +32,14 @@ impl Compressor {
             Compressor::Deflater() => DEFALTE,
             Compressor::BZip2() => BZIP2,
             Compressor::DeflaterFate2() => DEFALTE,
+        }
+    }
+
+    pub fn version_needed(&self) -> u16 {
+        // higher versions matched first
+        match self {
+            Compressor::BZip2() => 46,
+            _ => 20,
         }
     }
 
@@ -110,6 +119,7 @@ impl Compressor {
             }
 
             Compressor::DeflaterFate2() => {
+                //TODO chage vec to stream
                 let mut zencoder = ZlibEncoderFlate::new(Vec::new(), Compression::default());
 
                 let mut buf = vec![0; 4096];
@@ -126,7 +136,9 @@ impl Compressor {
                     zencoder.write_all(&buf[..read])?;
                     //self.sink.write_all(&buf[..read]).await?; // Payload chunk.
                 }
-                zencoder.flush()?;
+                let hello = zencoder.finish()?;
+
+                writter.write_all(&hello).await?;
 
                 Ok(total_read)
             }

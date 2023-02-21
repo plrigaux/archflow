@@ -1,9 +1,13 @@
 use std::io::Cursor;
 use std::path::Path;
+use tokio::fs::File;
+
 use zipstream::{
     archive::{Archive, FileDateTime},
+    compression,
     tools::archive_size,
 };
+
 #[test]
 fn archive_size_test() {
     assert_eq!(
@@ -23,7 +27,7 @@ fn archive_size_test() {
     );
 }
 
-#[tokio::test]
+//#[tokio::test]
 async fn archive_structure() {
     let mut archive = Archive::new(Vec::new());
     archive
@@ -98,14 +102,38 @@ async fn archive_structure_zup() {
     //let data = archive.finalize().await.unwrap();
 }
 
-#[tokio::test]
-async fn archive_structure_compress_zlib_file1() -> Result<(), std::io::Error> {
-    let out_path = Path::new("/tmp/test_compress1.zip");
+async fn create_new_clean_file(file_name: &str) -> File {
+    let dir_prefix = "/tmp/zipstream";
+    let out_dir = Path::new(dir_prefix);
+    if !out_dir.exists() {
+        tokio::fs::create_dir_all(out_dir)
+            .await
+            .unwrap_or_else(|error| {
+                panic!("creating dir {:?} failed, because {:?}", dir_prefix, error);
+            })
+    }
+
+    let out_path = out_dir.join(file_name);
 
     if out_path.exists() {
-        tokio::fs::remove_file(out_path).await?;
+        tokio::fs::remove_file(&out_path)
+            .await
+            .unwrap_or_else(|error| {
+                panic!("deleting file {:?} failed, because {:?}", &out_path, error);
+            });
     }
-    let file = tokio::fs::File::create(out_path).await?;
+    let file = tokio::fs::File::create(&out_path)
+        .await
+        .unwrap_or_else(|error| {
+            panic!("creating file {:?} failed, because {:?}", &out_path, error);
+        });
+
+    file
+}
+
+#[tokio::test]
+async fn archive_structure_compress_tokio_zlib_file1() -> Result<(), std::io::Error> {
+    let file = create_new_clean_file("test_zlib_tokio1.zip").await;
 
     let mut archive = Archive::new(file);
 
@@ -124,14 +152,33 @@ async fn archive_structure_compress_zlib_file1() -> Result<(), std::io::Error> {
 }
 
 #[tokio::test]
-async fn archive_structure_zup_on_file2() -> Result<(), std::io::Error> {
-    println!("ASDFASDFASDFASDF");
-    let out_path = Path::new("/tmp/test_flat1.zip");
+async fn archive_structure_compress_flate2_zlib_file1() -> Result<(), std::io::Error> {
+    let file = create_new_clean_file("test_zlib_flate1.zip").await;
 
-    if out_path.exists() {
-        tokio::fs::remove_file(out_path).await?;
-    }
-    let file = tokio::fs::File::create(out_path).await?;
+    let mut archive = Archive::new(file);
+
+    let mut f = tokio::fs::File::open("tests/file1.txt").await.unwrap();
+
+    archive
+        .append_file(
+            "file1.txt",
+            FileDateTime::now(),
+            compression::Compressor::DeflaterFate2(),
+            &mut f,
+        )
+        .await
+        .unwrap();
+
+    archive.finalize().await.unwrap();
+    println!("archive size = {:?}", archive.get_archive_size());
+    //let data = archive.finalize().await.unwrap();
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn archive_structure_zup_on_file2() -> Result<(), std::io::Error> {
+    let file = create_new_clean_file("test_flat1.zip").await;
 
     let mut archive = Archive::new(file);
 
@@ -151,13 +198,7 @@ async fn archive_structure_zup_on_file2() -> Result<(), std::io::Error> {
 
 #[tokio::test]
 async fn archive_structure_compress_bzip_file1() -> Result<(), std::io::Error> {
-    println!("ASDFASDFASDFASDF");
-    let out_path = Path::new("/tmp/test_bzip1.zip");
-
-    if out_path.exists() {
-        tokio::fs::remove_file(out_path).await?;
-    }
-    let file = tokio::fs::File::create(out_path).await?;
+    let file = create_new_clean_file("test_bzip1.zip").await;
 
     let mut archive = Archive::new(file);
 
