@@ -6,20 +6,22 @@ use crate::async_write_wrapper::AsyncWriteWrapper;
 use crate::compression::Compressor;
 use crate::constants::{
     CENTRAL_DIRECTORY_END_SIGNATURE, CENTRAL_DIRECTORY_ENTRY_BASE_SIZE,
-    CENTRAL_DIRECTORY_ENTRY_SIGNATURE, DESCRIPTOR_SIZE, END_OF_CENTRAL_DIRECTORY_SIZE,
-    FILE_HEADER_BASE_SIZE,
+    CENTRAL_DIRECTORY_ENTRY_SIGNATURE, DATA_DESCRIPTOR_SIGNATURE, DESCRIPTOR_SIZE,
+    END_OF_CENTRAL_DIRECTORY_SIZE, FILE_HEADER_BASE_SIZE,
 };
 use std::io::Error as IoError;
 
 #[derive(Debug)]
 struct ArchiveFileEntry {
-    name: String,
+    file_name: String,
+    file_len: u16,
     compressed_size: u32, // Compressed size.
     original_size: u32,
     crc: u32,
     offset: u32,
     datetime: (u16, u16),
     compressor: Compressor,
+    general_purpose_flags: u16,
 }
 
 pub const DEFAULT_VERSION: u8 = 46;
@@ -189,12 +191,13 @@ impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
         let compression_method = compressor.compression_method();
 
         let file_len = file_name.as_bytes().len();
+        let general_purpose_flag: u16 = 1 << 3 | 1 << 11;
 
         let mut header = header![
             FILE_HEADER_BASE_SIZE + file_len;
             0x04034b50u32,          // Local file header signature.
             compressor.version_needed(),                  // Version needed to extract.
-            1u16 << 3 | 1 << 11,    // General purpose flag (temporary crc and sizes + UTF-8 filename).
+            general_purpose_flag,    // General purpose flag (temporary crc and sizes + UTF-8 filename).
             compression_method,     // Compression method .
             time,                   // Modification time.
             date,                   // Modification date.
@@ -224,7 +227,7 @@ impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
 
         let descriptor = header![
             DESCRIPTOR_SIZE;
-            0x08074b50u32,      // Data descriptor signature.
+            DATA_DESCRIPTOR_SIGNATURE,      // Data descriptor signature.
             crc,                // CRC32.
             total_compress as u32,  // Compressed size.
             total_read as u32,  // Uncompressed size.
@@ -234,13 +237,15 @@ impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
         self.update_written(descriptor.len() as u32);
 
         self.files_info.push(ArchiveFileEntry {
-            name: file_name.to_owned(),
+            file_name: file_name.to_owned(),
+            file_len: file_len as u16,
             original_size: total_read as u32,
             compressed_size: total_compress as u32,
             crc,
             offset,
             datetime: (date, time),
             compressor,
+            general_purpose_flags: general_purpose_flag,
         });
 
         Ok(())
@@ -262,18 +267,18 @@ impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
         let mut central_directory_size = 0;
         for file_info in &self.files_info {
             let mut entry = header![
-                CENTRAL_DIRECTORY_ENTRY_BASE_SIZE + file_info.name.len();
+                CENTRAL_DIRECTORY_ENTRY_BASE_SIZE + file_info.file_len as usize;
                 CENTRAL_DIRECTORY_ENTRY_SIGNATURE,                  // Central directory entry signature.
                 file_info.version_made_by(),                      // Version made by.
                 file_info.version_needed(),                          // Version needed to extract.
-                1u16 << 3 | 1 << 11,            // General purpose flag (temporary crc and sizes + UTF-8 filename).
+                file_info.general_purpose_flags,            // General purpose flag (temporary crc and sizes + UTF-8 filename).
                 file_info.compressor.compression_method(),       // Compression method .
                 file_info.datetime.1,           // Modification time.
                 file_info.datetime.0,           // Modification date.
                 file_info.crc,                  // CRC32.
                 file_info.compressed_size,          // Compressed size.
                 file_info.original_size,          // Uncompressed size.
-                file_info.name.len() as u16,    // Filename length.
+                file_info.file_len,    // Filename length.
                 0u16,                           // Extra field length.
                 0u16,                           // File comment length.
                 0u16,                           // File's Disk number.
@@ -281,7 +286,7 @@ impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
                 (0o100000u32 | 0o0000400 | 0o0000200 | 0o0000040 | 0o0000004) << 16, // External file attributes (regular file / rw-r--r--).
                 file_info.offset,        // Offset from start of file to local file header.
             ];
-            entry.extend_from_slice(file_info.name.as_bytes()); // Filename.
+            entry.extend_from_slice(file_info.file_name.as_bytes()); // Filename.
             self.sink.write_all(&entry).await?;
             central_directory_size += entry.len();
         }
