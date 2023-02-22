@@ -173,6 +173,23 @@ impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
         Ok(())
     }
 
+    pub async fn append_file_no_extend<R>(
+        &mut self,
+        file_name: &str,
+        datetime: FileDateTime,
+        compressor: Compressor,
+        reader: &mut R,
+    ) -> Result<(), IoError>
+    where
+        W: AsyncWrite + Unpin,
+        R: AsyncRead + Unpin,
+    {
+        self.append_base_local_headed(file_name, datetime, reader, compressor)
+            .await?;
+
+        Ok(())
+    }
+
     async fn append_base<R>(
         &mut self,
         file_name: &str,
@@ -240,6 +257,76 @@ impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
             file_len: file_len as u16,
             original_size: total_read as u32,
             compressed_size: total_compress as u32,
+            crc,
+            offset,
+            datetime: (date, time),
+            compressor,
+            general_purpose_flags: general_purpose_flag,
+        });
+
+        Ok(())
+    }
+
+    async fn append_base_local_headed<R>(
+        &mut self,
+        file_name: &str,
+        datetime: FileDateTime,
+        reader: &mut R,
+        compressor: Compressor,
+    ) -> Result<(), IoError>
+    where
+        W: AsyncWrite + Unpin,
+        R: AsyncRead + Unpin,
+    {
+        let (date, time) = datetime.ms_dos();
+        let offset = self.written_bytes_count;
+
+        let compression_method = compressor.compression_method();
+
+        let file_len = file_name.as_bytes().len();
+        let general_purpose_flag: u16 = 1 << 11;
+
+        let mut hasher = Hasher::new();
+        let buffer: Vec<u8> = Vec::new();
+        let mut async_writer = AsyncWriteWrapper::new(buffer);
+
+        let total_read = compressor
+            .compress(&mut async_writer, reader, &mut hasher)
+            .await?;
+
+        async_writer.flush().await?;
+        let retreived_buffer = async_writer.retrieve_writer();
+        let total_compress = retreived_buffer.len();
+
+        let crc = hasher.finalize();
+
+        let mut header = header![
+            FILE_HEADER_BASE_SIZE + file_len;
+            LOCAL_FILE_HEADER_SIGNATURE,          // Local file header signature.
+            compressor.version_needed(),                  // Version needed to extract.
+            general_purpose_flag,    // General purpose flag (temporary crc and sizes + UTF-8 filename).
+            compression_method,     // Compression method .
+            time,                   // Modification time.
+            date,                   // Modification date.
+            crc,                   // Temporary CRC32.
+            total_compress as u32,                   // Temporary compressed size.
+            total_read as u32,                   // Temporary uncompressed size.
+            file_len as u16,      // Filename length.
+            0u16,                   // Extra field length.
+        ];
+        header.extend_from_slice(file_name.as_bytes()); // Filename.
+        self.sink.write_all(&header).await?;
+        //self.sink.flush().await?;
+        self.update_written_bytes_count(header.len() as u32);
+
+        self.sink.write_all(&retreived_buffer).await?;
+        self.update_written_bytes_count(total_compress as u32);
+
+        self.files_info.push(ArchiveFileEntry {
+            file_name: file_name.to_owned(),
+            file_len: file_len as u16,
+            compressed_size: total_compress as u32,
+            original_size: total_read as u32,
             crc,
             offset,
             datetime: (date, time),
