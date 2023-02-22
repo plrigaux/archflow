@@ -51,7 +51,7 @@ impl Compressor {
 
     pub async fn compress<'a, R, W>(
         &self,
-        writter: &'a mut AsyncWriteWrapper<W>,
+        writer: &'a mut AsyncWriteWrapper<W>,
         reader: &'a mut R,
         hasher: &'a mut Hasher,
     ) -> Result<usize, IoError>
@@ -72,7 +72,7 @@ impl Compressor {
 
                     total_read += read;
                     hasher.update(&buf[..read]);
-                    writter.write_all(&buf[..read]).await?;
+                    writer.write_all(&buf[..read]).await?;
                     //self.sink.write_all(&buf[..read]).await?; // Payload chunk.
                 }
                 //w.flush().await?;
@@ -81,7 +81,7 @@ impl Compressor {
                 Ok(total_read)
             }
             Compressor::Deflated() => {
-                let mut zencoder = ZlibEncoder::new(writter);
+                let mut zencoder = ZlibEncoder::new(writer);
 
                 let mut buf = vec![0; 4096];
                 let mut total_read = 0;
@@ -103,7 +103,7 @@ impl Compressor {
             }
 
             Compressor::BZip2() => {
-                let mut zencoder = BzEncoder::new(writter);
+                let mut zencoder = BzEncoder::new(writer);
 
                 let mut buf = vec![0; 4096];
                 let mut total_read = 0;
@@ -144,13 +144,13 @@ impl Compressor {
                 }
                 let hello = zencoder.finish()?;
 
-                writter.write_all(&hello).await?;
+                writer.write_all(&hello).await?;
 
                 Ok(total_read)
             }
 
             Compressor::Zstd() => {
-                let mut zencoder = ZstdEncoder::new(writter);
+                let mut zencoder = ZstdEncoder::new(writer);
 
                 let mut buf = vec![0; 4096];
                 let mut total_read = 0;
@@ -171,7 +171,7 @@ impl Compressor {
                 Ok(total_read)
             }
             Compressor::Xz() => {
-                let mut zencoder = XzEncoder::new(writter);
+                let mut zencoder = XzEncoder::new(writer);
 
                 let mut buf = vec![0; 4096];
                 let mut total_read = 0;

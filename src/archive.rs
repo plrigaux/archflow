@@ -119,7 +119,7 @@ macro_rules! header {
 pub struct Archive<W: tokio::io::AsyncWrite + Unpin> {
     sink: AsyncWriteWrapper<W>,
     files_info: Vec<ArchiveFileEntry>,
-    written: u32,
+    written_bytes_count: u32,
 }
 
 impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
@@ -129,7 +129,7 @@ impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
         Self {
             sink: AsyncWriteWrapper::new(sink_),
             files_info: Vec::new(),
-            written: 0,
+            written_bytes_count: 0,
         }
     }
 
@@ -141,9 +141,8 @@ impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
         self.sink.get_compress_length()
     }
 
-    pub fn update_written(&mut self, nb_bytes: u32) {
-        //println!("written bytes: {}", nb_bytes);
-        self.written += nb_bytes;
+    pub fn update_written_bytes_count(&mut self, nb_bytes: u32) {
+        self.written_bytes_count += nb_bytes;
     }
     /// Append a new file to the archive using the provided name, date/time and `AsyncRead` object.  
     /// Filename must be valid UTF-8. Some (very) old zip utilities might mess up filenames during extraction if they contain non-ascii characters.  
@@ -186,7 +185,7 @@ impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
         R: AsyncRead + Unpin,
     {
         let (date, time) = datetime.ms_dos();
-        let offset = self.written;
+        let offset = self.written_bytes_count;
 
         let compression_method = compressor.compression_method();
 
@@ -210,7 +209,7 @@ impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
         header.extend_from_slice(file_name.as_bytes()); // Filename.
         self.sink.write_all(&header).await?;
         //self.sink.flush().await?;
-        self.update_written(header.len() as u32);
+        self.update_written_bytes_count(header.len() as u32);
         let mut hasher = Hasher::new();
         let cur_size = self.sink.get_compress_length();
 
@@ -221,7 +220,7 @@ impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
         //self.sink.flush().await?;
         let total_compress = self.sink.get_compress_length() - cur_size;
 
-        self.update_written(total_compress as u32);
+        self.update_written_bytes_count(total_compress as u32);
 
         let crc = hasher.finalize();
 
@@ -234,7 +233,7 @@ impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
         ];
         self.sink.write_all(&descriptor).await?;
 
-        self.update_written(descriptor.len() as u32);
+        self.update_written_bytes_count(descriptor.len() as u32);
 
         self.files_info.push(ArchiveFileEntry {
             file_name: file_name.to_owned(),
@@ -310,7 +309,7 @@ impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
             number_of_files_on_this_disk: self.files_info.len() as u16,
             number_of_files: self.files_info.len() as u16,
             central_directory_size: central_directory_size as u32,
-            central_directory_offset: self.written,
+            central_directory_offset: self.written_bytes_count,
             zip_file_comment_len: 0,
         };
 
