@@ -7,7 +7,7 @@ use crate::compression::Compressor;
 use crate::constants::{
     CENTRAL_DIRECTORY_END_SIGNATURE, CENTRAL_DIRECTORY_ENTRY_BASE_SIZE,
     CENTRAL_DIRECTORY_ENTRY_SIGNATURE, DATA_DESCRIPTOR_SIGNATURE, DESCRIPTOR_SIZE,
-    END_OF_CENTRAL_DIRECTORY_SIZE, FILE_HEADER_BASE_SIZE,
+    END_OF_CENTRAL_DIRECTORY_SIZE, FILE_HEADER_BASE_SIZE, LOCAL_FILE_HEADER_SIGNATURE,
 };
 use std::io::Error as IoError;
 
@@ -194,7 +194,7 @@ impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
 
         let mut header = header![
             FILE_HEADER_BASE_SIZE + file_len;
-            0x04034b50u32,          // Local file header signature.
+            LOCAL_FILE_HEADER_SIGNATURE,          // Local file header signature.
             compressor.version_needed(),                  // Version needed to extract.
             general_purpose_flag,    // General purpose flag (temporary crc and sizes + UTF-8 filename).
             compression_method,     // Compression method .
@@ -282,7 +282,7 @@ impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
                 0u16,                           // File comment length.
                 0u16,                           // File's Disk number.
                 0u16,                           // Internal file attributes.
-                (0o100000u32 | 0o0000400 | 0o0000200 | 0o0000040 | 0o0000004) << 16, // External file attributes (regular file / rw-r--r--).
+                (0o100644 << 16) as u32, // External file attributes (regular file / rw-r--r--).
                 file_info.offset,        // Offset from start of file to local file header.
             ];
             entry.extend_from_slice(file_info.file_name.as_bytes()); // Filename.

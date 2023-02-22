@@ -7,4 +7,5 @@ pub const END_OF_CENTRAL_DIRECTORY_SIZE: usize = 5 * size_of::<u16>() + 3 * size
 
 pub const CENTRAL_DIRECTORY_END_SIGNATURE: u32 = 0x06054b50;
 pub const CENTRAL_DIRECTORY_ENTRY_SIGNATURE: u32 = 0x02014b50;
+pub const LOCAL_FILE_HEADER_SIGNATURE: u32 = 0x04034b50; // Local file header signature.
 pub const DATA_DESCRIPTOR_SIGNATURE: u32 = 0x08074b50; // Data descriptor signature.

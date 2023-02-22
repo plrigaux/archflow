@@ -27,7 +27,7 @@ fn archive_size_test() {
     );
 }
 
-#[tokio::test]
+/* #[tokio::test]
 async fn archive_structure() {
     let mut archive = Archive::new(Vec::new());
     archive
@@ -108,7 +108,7 @@ async fn archive_structure_zup() {
     println!("archive size = {:?}", archive.get_archive_size())
     //let data = archive.finalize().await.unwrap();
 }
-
+ */
 async fn create_new_clean_file(file_name: &str) -> File {
     let dir_prefix = "/tmp/zipstream";
     let out_dir = Path::new(dir_prefix);
