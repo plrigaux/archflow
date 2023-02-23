@@ -1,6 +1,7 @@
 use zipstream::{
-    archive::{Archive, FileDateTime},
+    archive::Archive,
     compression::{self, Compressor},
+    types::FileDateTime,
 };
 
 mod common;
@@ -17,7 +18,7 @@ async fn archive_structure_compress_tokio_zlib_file1() -> Result<(), std::io::Er
     archive
         .append_file_no_extend(
             "file1.txt",
-            FileDateTime::now(),
+            FileDateTime::Zero,
             Compressor::Deflated(),
             &mut f,
         )
@@ -42,7 +43,7 @@ async fn archive_structure_compress_flate2_zlib_file1() -> Result<(), std::io::E
     archive
         .append_file_no_extend(
             "file1.txt",
-            FileDateTime::now(),
+            FileDateTime::Zero,
             compression::Compressor::DeflatedFate2(),
             &mut f,
         )
@@ -65,12 +66,7 @@ async fn archive_structure_zup_on_file2() -> Result<(), std::io::Error> {
     let mut f = tokio::fs::File::open("tests/file1.txt").await.unwrap();
 
     archive
-        .append_file_no_extend(
-            "file1.txt",
-            FileDateTime::now(),
-            Compressor::Store(),
-            &mut f,
-        )
+        .append_file_no_extend("file1.txt", FileDateTime::Zero, Compressor::Store(), &mut f)
         .await
         .unwrap();
 
@@ -90,12 +86,7 @@ async fn archive_structure_compress_bzip_file1() -> Result<(), std::io::Error> {
     let mut f = tokio::fs::File::open("tests/file1.txt").await.unwrap();
 
     archive
-        .append_file(
-            "file1.txt",
-            FileDateTime::now(),
-            Compressor::BZip2(),
-            &mut f,
-        )
+        .append_file("file1.txt", FileDateTime::Zero, Compressor::BZip2(), &mut f)
         .await
         .unwrap();
 
@@ -115,7 +106,7 @@ async fn archive_structure_compress_xz_file1() -> Result<(), std::io::Error> {
     let mut f = tokio::fs::File::open("tests/file1.txt").await.unwrap();
 
     archive
-        .append_file_no_extend("file1.txt", FileDateTime::now(), Compressor::Xz(), &mut f)
+        .append_file_no_extend("file1.txt", FileDateTime::Zero, Compressor::Xz(), &mut f)
         .await
         .unwrap();
 
@@ -135,12 +126,7 @@ async fn archive_structure_compress_zstd_file1() -> Result<(), std::io::Error> {
     let mut f = tokio::fs::File::open("tests/file1.txt").await.unwrap();
 
     archive
-        .append_file_no_extend(
-            "file1.txt",
-            FileDateTime::now(),
-            Compressor::BZip2(),
-            &mut f,
-        )
+        .append_file_no_extend("file1.txt", FileDateTime::Zero, Compressor::BZip2(), &mut f)
         .await
         .unwrap();
 

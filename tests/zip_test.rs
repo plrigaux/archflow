@@ -1,7 +1,7 @@
 use std::io::Read;
 use std::path::Path;
 use std::{fs::File, io::Write};
-use zip::{write::FileOptions, ZipWriter};
+use zip::{write::FileOptions, DateTime, ZipWriter};
 
 fn create_new_clean_file_std(file_name: &str) -> std::fs::File {
     let dir_prefix = "/tmp/zipstream";
@@ -37,7 +37,7 @@ fn zip_test() -> Result<(), std::io::Error> {
 
     let options = FileOptions::default()
         .compression_method(zip::CompressionMethod::Deflated)
-        .unix_permissions(0o755);
+        .last_modified_time(DateTime::default());
 
     zip.start_file("file1.txt", options)?;
     let mut f = File::open("tests/file1.txt")?;

@@ -27,6 +27,7 @@ pub enum Compressor {
     BZip2(),
     Zstd(),
     Xz(),
+    Unknown(u16),
 }
 
 impl Compressor {
@@ -38,6 +39,7 @@ impl Compressor {
             Compressor::DeflatedFate2() => DEFALTE,
             Compressor::Zstd() => ZSTD,
             Compressor::Xz() => XZ,
+            Compressor::Unknown(cm) => *cm,
         }
     }
 
@@ -46,6 +48,18 @@ impl Compressor {
         match self {
             Compressor::BZip2() => 46,
             _ => 20,
+        }
+    }
+
+    pub fn from_compression_method(compression_method: u16) -> Compressor {
+        // higher versions matched first
+        match compression_method {
+            STORE => Compressor::Store(),
+            BZIP2 => Compressor::Deflated(),
+            DEFALTE => Compressor::Deflated(),
+            ZSTD => Compressor::Deflated(),
+            XZ => Compressor::Deflated(),
+            _ => Compressor::Unknown(compression_method),
         }
     }
 
@@ -97,6 +111,7 @@ impl Compressor {
                     zencoder.write_all(&buf[..read]).await?;
                     //self.sink.write_all(&buf[..read]).await?; // Payload chunk.
                 }
+                zencoder.flush().await?;
                 zencoder.shutdown().await?;
 
                 Ok(total_read)
@@ -142,9 +157,13 @@ impl Compressor {
                     zencoder.write_all(&buf[..read])?;
                     //self.sink.write_all(&buf[..read]).await?; // Payload chunk.
                 }
+
+                zencoder.flush()?;
+
                 let hello = zencoder.finish()?;
 
                 writer.write_all(&hello).await?;
+                writer.flush().await?;
 
                 Ok(total_read)
             }
@@ -190,6 +209,9 @@ impl Compressor {
                 zencoder.shutdown().await?;
 
                 Ok(total_read)
+            }
+            Compressor::Unknown(cm) => {
+                panic!("Unsupported compressor, compression method: {:?}", cm)
             }
         }
     }
