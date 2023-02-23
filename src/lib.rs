@@ -3,7 +3,7 @@ pub mod archive;
 pub mod async_write_wrapper;
 pub mod compression;
 mod constants;
-mod descriptor;
+pub mod descriptor;
 pub mod tools;
 pub mod types;
 trait AsyncFn<T, U, V>: Fn(T, U, V) -> <Self as AsyncFn<T, U, V>>::Fut {

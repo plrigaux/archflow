@@ -63,6 +63,19 @@ impl Compressor {
         }
     }
 
+    pub fn label(&self) -> &str {
+        // higher versions matched first
+        match self {
+            Compressor::Store() => "store",
+            Compressor::Deflated() => "deflate",
+            Compressor::DeflatedFate2() => todo!(),
+            Compressor::BZip2() => "bzip2",
+            Compressor::Zstd() => "zstd",
+            Compressor::Xz() => "xz",
+            Compressor::Unknown(_) => "unknown",
+        }
+    }
+
     pub async fn compress<'a, R, W>(
         &self,
         writer: &'a mut AsyncWriteWrapper<W>,
@@ -214,5 +227,9 @@ impl Compressor {
                 panic!("Unsupported compressor, compression method: {:?}", cm)
             }
         }
+    }
+
+    pub fn is_unknown(&self) -> bool {
+        matches!(self, Compressor::Unknown(_))
     }
 }

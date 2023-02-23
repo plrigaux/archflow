@@ -67,7 +67,7 @@ impl ArchiveDescriptor {
     }
 }
 
-pub struct ArchiveDescriptorReader {
+struct ArchiveDescriptorReader {
     index: usize,
 }
 

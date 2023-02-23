@@ -91,11 +91,19 @@ impl fmt::Display for ArchiveFileEntry {
             "minimum software version required to extract:", major, minor
         )?;
 
-        writeln!(
-            f,
-            "{: <padding$}{}",
-            "compression method:", self.compression_method
-        )?;
+        let compressor = Compressor::from_compression_method(self.compression_method);
+        let label = if compressor.is_unknown() {
+            let str_val = self.compression_method.to_string();
+
+            let mut val = String::from(compressor.label());
+            val.push_str(" (");
+            val.push_str(&str_val);
+            val.push(')');
+            val
+        } else {
+            compressor.label().to_owned()
+        };
+        writeln!(f, "{: <padding$}{}", "compression method:", label)?;
 
         let extended_local_header = if self.is_encrypted() {
             "encrypted"
@@ -119,6 +127,13 @@ impl fmt::Display for ArchiveFileEntry {
             f,
             "{: <padding$}{}",
             "extended local header:", extended_local_header
+        )?;
+
+        let date_time = FileDateTime::from_msdos(self.last_mod_file_date, self.last_mod_file_date);
+        writeln!(
+            f,
+            "{: <padding$}{}",
+            "file last modified on (DOS date/time):", date_time
         )?;
 
         writeln!(f, "{: <padding$}{:x}", "32-bit CRC value (hex):", self.crc)?;
@@ -223,6 +238,7 @@ impl FileDateTime {
     }
 
     pub fn to_time(&self) -> chrono::NaiveDateTime {
+        //println!("to_time {:?}", self);
         match self {
             FileDateTime::Custom {
                 year,
@@ -239,7 +255,10 @@ impl FileDateTime {
                 *minute as u32,
                 *second as u32,
             ),
-            _ => FileDateTime::to_time_dry(1980, 1, 1, 0, 0, 0),
+            _ => {
+                let dt = FileDateTime::from_msdos(0u16, 0u16);
+                dt.to_time()
+            }
         }
     }
 
@@ -251,10 +270,17 @@ impl FileDateTime {
         minute: u32,
         second: u32,
     ) -> chrono::NaiveDateTime {
-        NaiveDate::from_ymd_opt(year, month, day)
-            .unwrap_or_default()
-            .and_hms_opt(hour, minute, second)
-            .unwrap_or_default()
+        let date = NaiveDate::from_ymd_opt(year, month, day)
+            .unwrap_or_else(|| NaiveDate::from_ymd_opt(1980, 1, 1).unwrap());
+
+        date.and_hms_opt(hour, minute, second).unwrap_or_default()
+    }
+}
+
+impl fmt::Display for FileDateTime {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let date_time = self.to_time();
+        write!(f, "{:}", date_time)
     }
 }
 
@@ -269,5 +295,12 @@ mod test {
         let ctime = time.to_time();
 
         println!("Time zero {}", ctime)
+    }
+
+    #[test]
+    fn test_time_display_0_0() {
+        let date_time = FileDateTime::from_msdos(0, 0);
+
+        println!("Time zero {}", date_time)
     }
 }
