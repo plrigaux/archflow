@@ -1,5 +1,6 @@
 use crate::async_write_wrapper::AsyncWriteWrapper;
 use async_compression::tokio::write::BzEncoder;
+use async_compression::tokio::write::LzmaEncoder;
 use async_compression::tokio::write::XzEncoder;
 use async_compression::tokio::write::ZlibEncoder;
 use async_compression::tokio::write::ZstdEncoder;
@@ -15,17 +16,19 @@ use tokio::io::AsyncWrite;
 use tokio::io::AsyncWriteExt;
 
 pub const STORE: u16 = 0;
-pub const BZIP2: u16 = 12;
 pub const DEFALTE: u16 = 8;
+pub const BZIP2: u16 = 12;
+pub const LZMA: u16 = 14;
 pub const ZSTD: u16 = 93;
 pub const XZ: u16 = 95;
 
 #[derive(Debug)]
 pub enum Compressor {
     Store(),
-    Deflated(),
-    DeflatedFate2(),
+    Deflate(),
+    DeflateFate2(),
     BZip2(),
+    Lzma(),
     Zstd(),
     Xz(),
     Unknown(u16),
@@ -35,9 +38,10 @@ impl Compressor {
     pub fn compression_method(&self) -> u16 {
         match self {
             Compressor::Store() => STORE,
-            Compressor::Deflated() => DEFALTE,
+            Compressor::Deflate() => DEFALTE,
+            Compressor::DeflateFate2() => DEFALTE,
             Compressor::BZip2() => BZIP2,
-            Compressor::DeflatedFate2() => DEFALTE,
+            Compressor::Lzma() => LZMA,
             Compressor::Zstd() => ZSTD,
             Compressor::Xz() => XZ,
             Compressor::Unknown(compression_method) => *compression_method,
@@ -56,10 +60,11 @@ impl Compressor {
         // higher versions matched first
         match compression_method {
             STORE => Compressor::Store(),
-            BZIP2 => Compressor::Deflated(),
-            DEFALTE => Compressor::Deflated(),
-            ZSTD => Compressor::Deflated(),
-            XZ => Compressor::Deflated(),
+            DEFALTE => Compressor::Deflate(),
+            BZIP2 => Compressor::BZip2(),
+            LZMA => Compressor::Lzma(),
+            ZSTD => Compressor::Zstd(),
+            XZ => Compressor::Xz(),
             _ => Compressor::Unknown(compression_method),
         }
     }
@@ -68,9 +73,10 @@ impl Compressor {
         // higher versions matched first
         match self {
             Compressor::Store() => "store",
-            Compressor::Deflated() => "deflate",
-            Compressor::DeflatedFate2() => "deflate",
+            Compressor::Deflate() => "deflate",
+            Compressor::DeflateFate2() => "deflate",
             Compressor::BZip2() => "bzip2",
+            Compressor::Lzma() => "lzma",
             Compressor::Zstd() => "zstd",
             Compressor::Xz() => "xz",
             Compressor::Unknown(_) => "unknown",
@@ -108,7 +114,7 @@ impl Compressor {
 
                 Ok(total_read)
             }
-            Compressor::Deflated() => {
+            Compressor::Deflate() => {
                 let mut zencoder = ZlibEncoder::new(writer);
 
                 let mut buf = vec![0; 4096];
@@ -131,29 +137,7 @@ impl Compressor {
                 Ok(total_read)
             }
 
-            Compressor::BZip2() => {
-                let mut zencoder = BzEncoder::new(writer);
-
-                let mut buf = vec![0; 4096];
-                let mut total_read = 0;
-
-                loop {
-                    let read = reader.read(&mut buf).await?;
-                    if read == 0 {
-                        break;
-                    }
-
-                    total_read += read;
-                    hasher.update(&buf[..read]);
-                    zencoder.write_all(&buf[..read]).await?;
-                    //self.sink.write_all(&buf[..read]).await?; // Payload chunk.
-                }
-                zencoder.shutdown().await?;
-
-                Ok(total_read)
-            }
-
-            Compressor::DeflatedFate2() => {
+            Compressor::DeflateFate2() => {
                 //TODO chage vec to stream
                 let mut zencoder = ZlibEncoderFlate::new(Vec::new(), Compression::default());
 
@@ -182,6 +166,48 @@ impl Compressor {
                 Ok(total_read)
             }
 
+            Compressor::BZip2() => {
+                let mut zencoder = BzEncoder::new(writer);
+
+                let mut buf = vec![0; 4096];
+                let mut total_read = 0;
+
+                loop {
+                    let read = reader.read(&mut buf).await?;
+                    if read == 0 {
+                        break;
+                    }
+
+                    total_read += read;
+                    hasher.update(&buf[..read]);
+                    zencoder.write_all(&buf[..read]).await?;
+                    //self.sink.write_all(&buf[..read]).await?; // Payload chunk.
+                }
+                zencoder.shutdown().await?;
+
+                Ok(total_read)
+            }
+            Compressor::Lzma() => {
+                let mut zencoder = LzmaEncoder::new(writer);
+
+                let mut buf = vec![0; 4096];
+                let mut total_read = 0;
+
+                loop {
+                    let read = reader.read(&mut buf).await?;
+                    if read == 0 {
+                        break;
+                    }
+
+                    total_read += read;
+                    hasher.update(&buf[..read]);
+                    zencoder.write_all(&buf[..read]).await?;
+                    //self.sink.write_all(&buf[..read]).await?; // Payload chunk.
+                }
+                zencoder.shutdown().await?;
+
+                Ok(total_read)
+            }
             Compressor::Zstd() => {
                 let mut zencoder = ZstdEncoder::new(writer);
 

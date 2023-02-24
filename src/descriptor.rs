@@ -154,8 +154,8 @@ mod test {
 
     #[test]
     fn test_write_file_header() {
-        let version_needed = Compressor::Deflated().version_needed();
-        let compression_method = Compressor::Deflated().compression_method();
+        let version_needed = Compressor::Deflate().version_needed();
+        let compression_method = Compressor::Deflate().compression_method();
         let general_purpose_flags: u16 = 1 << 3 | 1 << 11;
         let time = 0u16;
         let date = 0u16;
