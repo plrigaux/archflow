@@ -51,29 +51,6 @@ impl ArchiveFileEntry {
 }
 
 impl fmt::Display for ArchiveFileEntry {
-    /* offset of local header from start of archive:   0
-    (0000000000000000h) bytes
-    file system or operating system of origin:      Unix
-    version of encoding software:                   4.6
-    minimum file system compatibility required:     MS-DOS, OS/2 or NT FAT
-    minimum software version required to extract:   2.0
-    compression method:                             deflated
-    compression sub-type (deflation):               normal
-    file security status:                           not encrypted
-    extended local header:                          no
-    file last modified on (DOS date/time):          1980 000 0 00:00:00
-    32-bit CRC value (hex):                         b3b7851d
-    compressed size:                                14022 bytes
-    uncompressed size:                              4120799 bytes
-    length of filename:                             9 characters
-    length of extra field:                          0 bytes
-    length of file comment:                         0 characters
-    disk number on which file begins:               disk 1
-    apparent file type:                             binary
-    Unix file attributes (100644 octal):            -rw-r--r--
-    MS-DOS file attributes (00 hex):                none
-
-    There is no file comment. */
     #[allow(clippy::writeln_empty_string)]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let padding = 48;
@@ -89,6 +66,12 @@ impl fmt::Display for ArchiveFileEntry {
             f,
             "{: <padding$}{}.{}",
             "minimum software version required to extract:", major, minor
+        )?;
+
+        writeln!(
+            f,
+            "{: <padding$}{:#016b}",
+            "general purpose bit flag:", self.general_purpose_flags
         )?;
 
         let compressor = Compressor::from_compression_method(self.compression_method);
@@ -202,7 +185,7 @@ impl FileDateTime {
         let (year, month, day, hour, min, sec) = self.tuple();
         (
             day | month << 5 | year.saturating_sub(1980) << 9,
-            (sec / 2) | min << 5 | hour << 11,
+            (sec >> 1) | min << 5 | hour << 11,
         )
     }
 

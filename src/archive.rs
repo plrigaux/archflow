@@ -274,7 +274,8 @@ impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
     where
         W: AsyncWrite + Unpin,
     {
-        let mut central_directory_size = 0;
+        let central_directory_offset = self.written_bytes_count;
+        let mut central_directory_size = 0u32;
         for file_info in &self.files_info {
             let mut central_directory_header = ArchiveDescriptor::new(
                 CENTRAL_DIRECTORY_ENTRY_BASE_SIZE + file_info.file_name_len as usize,
@@ -302,7 +303,8 @@ impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
             self.sink
                 .write_all(central_directory_header.buffer())
                 .await?;
-            central_directory_size += central_directory_header.len();
+
+            central_directory_size += central_directory_header.len() as u32;
         }
 
         let dir_end = CentralDirectoryEnd {
@@ -310,8 +312,8 @@ impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
             disk_with_central_directory: 0,
             total_number_of_entries_on_this_disk: self.files_info.len() as u16,
             total_number_of_entries: self.files_info.len() as u16,
-            central_directory_size: central_directory_size as u32,
-            central_directory_offset: self.written_bytes_count,
+            central_directory_size,
+            central_directory_offset,
             zip_file_comment_length: 0,
         };
 

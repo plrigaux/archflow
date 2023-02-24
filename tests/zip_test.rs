@@ -24,12 +24,11 @@ fn create_new_clean_file_std(file_name: &str) -> std::fs::File {
     })
 }
 
+const FILE_TO_COMPRESS: &str = "short_text_file.txt";
+
 #[test]
 fn zip_test() -> Result<(), std::io::Error> {
-    let file = create_new_clean_file_std("test_zip.zip");
-
-    /*     let path = std::path::Path::new(filename);
-    let file = std::fs::File::create(path).unwrap(); */
+    let file = create_new_clean_file_std("test__rust_zip.zip");
 
     let mut zip = ZipWriter::new(file);
 
@@ -39,8 +38,11 @@ fn zip_test() -> Result<(), std::io::Error> {
         .compression_method(zip::CompressionMethod::Deflated)
         .last_modified_time(DateTime::default());
 
-    zip.start_file("file1.txt", options)?;
-    let mut f = File::open("tests/file1.txt")?;
+    zip.start_file(FILE_TO_COMPRESS, options)?;
+
+    let path = Path::new("tests").join(FILE_TO_COMPRESS);
+
+    let mut f = File::open(&path)?;
 
     let mut buffer = Vec::new();
     f.read_to_end(&mut buffer)?;
