@@ -1,8 +1,5 @@
 use zipstream::{
-    archive::Archive,
-    compression::{self, Compressor},
-    tools::archive_size,
-    types::FileDateTime,
+    archive::Archive, compression::Compressor, tools::archive_size, types::FileDateTime,
 };
 
 mod common;

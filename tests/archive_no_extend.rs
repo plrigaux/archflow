@@ -1,138 +1,70 @@
-use zipstream::{
-    archive::Archive,
-    compression::{self, Compressor},
-    types::FileDateTime,
-};
+use zipstream::{archive::Archive, compression::Compressor, types::FileDateTime};
 
 mod common;
 use common::create_new_clean_file;
+const TEST_ID: &str = "NE";
 
-#[tokio::test]
-async fn archive_structure_compress_tokio_zlib_file1() -> Result<(), std::io::Error> {
-    let file = create_new_clean_file("test_zlib_tokio2.zip").await;
+async fn compress_file(compressor: Compressor, out_file_name: &str) {
+    let file = create_new_clean_file(out_file_name).await;
 
     let mut archive = Archive::new(file);
 
-    let mut f = tokio::fs::File::open("tests/file1.txt").await.unwrap();
+    let mut in_file = tokio::fs::File::open("tests/file1.txt").await.unwrap();
 
     archive
-        .append_file_no_extend(
-            "file1.txt",
-            FileDateTime::Zero,
-            Compressor::Deflated(),
-            &mut f,
-        )
+        .append_file_no_extend("file1.txt", FileDateTime::Zero, compressor, &mut in_file)
         .await
         .unwrap();
 
     archive.finalize().await.unwrap();
     println!("archive size = {:?}", archive.get_archive_size());
     //let data = archive.finalize().await.unwrap();
-
-    Ok(())
 }
 
 #[tokio::test]
-async fn archive_structure_compress_flate2_zlib_file1() -> Result<(), std::io::Error> {
-    let file = create_new_clean_file("test_zlib_flate2.zip").await;
+async fn archive_structure_compress_tokio_deflate() {
+    let compressor = Compressor::Deflated();
+    let out_file_name = ["test_", &compressor.to_string(), "_tokio", TEST_ID, ".zip"].join("");
 
-    let mut archive = Archive::new(file);
-
-    let mut f = tokio::fs::File::open("tests/file1.txt").await.unwrap();
-
-    archive
-        .append_file_no_extend(
-            "file1.txt",
-            FileDateTime::Zero,
-            compression::Compressor::DeflatedFate2(),
-            &mut f,
-        )
-        .await
-        .unwrap();
-
-    archive.finalize().await.unwrap();
-    println!("archive size = {:?}", archive.get_archive_size());
-    //let data = archive.finalize().await.unwrap();
-
-    Ok(())
+    compress_file(compressor, &out_file_name).await;
 }
 
 #[tokio::test]
-async fn archive_structure_zup_on_file2() -> Result<(), std::io::Error> {
-    let file = create_new_clean_file("test_flat2.zip").await;
+async fn archive_structure_compress_store() {
+    let compressor = Compressor::Store();
+    let out_file_name = ["test_", &compressor.to_string(), TEST_ID, ".zip"].join("");
 
-    let mut archive = Archive::new(file);
-
-    let mut f = tokio::fs::File::open("tests/file1.txt").await.unwrap();
-
-    archive
-        .append_file_no_extend("file1.txt", FileDateTime::Zero, Compressor::Store(), &mut f)
-        .await
-        .unwrap();
-
-    archive.finalize().await.unwrap();
-    println!("archive size = {:?}", archive.get_archive_size());
-    //let data = archive.finalize().await.unwrap();
-
-    Ok(())
+    compress_file(compressor, &out_file_name).await;
 }
 
 #[tokio::test]
-async fn archive_structure_compress_bzip_file1() -> Result<(), std::io::Error> {
-    let file = create_new_clean_file("test_bzip1.zip").await;
+async fn archive_structure_zlib_flate() {
+    let compressor = Compressor::DeflatedFate2();
+    let out_file_name = ["test_", &compressor.to_string(), TEST_ID, "_flate", ".zip"].join("");
 
-    let mut archive = Archive::new(file);
-
-    let mut f = tokio::fs::File::open("tests/file1.txt").await.unwrap();
-
-    archive
-        .append_file("file1.txt", FileDateTime::Zero, Compressor::BZip2(), &mut f)
-        .await
-        .unwrap();
-
-    archive.finalize().await.unwrap();
-    println!("archive size = {:?}", archive.get_archive_size());
-    //let data = archive.finalize().await.unwrap();
-
-    Ok(())
+    compress_file(compressor, &out_file_name).await;
 }
 
 #[tokio::test]
-async fn archive_structure_compress_xz_file1() -> Result<(), std::io::Error> {
-    let file = create_new_clean_file("test_xz2.zip").await;
+async fn archive_structure_compress_bzip_file1() {
+    let compressor = Compressor::BZip2();
+    let out_file_name = ["test_", &compressor.to_string(), TEST_ID, ".zip"].join("");
 
-    let mut archive = Archive::new(file);
-
-    let mut f = tokio::fs::File::open("tests/file1.txt").await.unwrap();
-
-    archive
-        .append_file_no_extend("file1.txt", FileDateTime::Zero, Compressor::Xz(), &mut f)
-        .await
-        .unwrap();
-
-    archive.finalize().await.unwrap();
-    println!("archive size = {:?}", archive.get_archive_size());
-    //let data = archive.finalize().await.unwrap();
-
-    Ok(())
+    compress_file(compressor, &out_file_name).await;
 }
 
 #[tokio::test]
-async fn archive_structure_compress_zstd_file1() -> Result<(), std::io::Error> {
-    let file = create_new_clean_file("test_zstd2.zip").await;
+async fn archive_structure_compress_xz_file1() {
+    let compressor = Compressor::Xz();
+    let out_file_name = ["test_", &compressor.to_string(), TEST_ID, ".zip"].join("");
 
-    let mut archive = Archive::new(file);
+    compress_file(compressor, &out_file_name).await;
+}
 
-    let mut f = tokio::fs::File::open("tests/file1.txt").await.unwrap();
+#[tokio::test]
+async fn archive_structure_compress_zstd_file1() {
+    let compressor = Compressor::Zstd();
+    let out_file_name = ["test_", &compressor.to_string(), TEST_ID, ".zip"].join("");
 
-    archive
-        .append_file_no_extend("file1.txt", FileDateTime::Zero, Compressor::BZip2(), &mut f)
-        .await
-        .unwrap();
-
-    archive.finalize().await.unwrap();
-    println!("archive size = {:?}", archive.get_archive_size());
-    //let data = archive.finalize().await.unwrap();
-
-    Ok(())
+    compress_file(compressor, &out_file_name).await;
 }
