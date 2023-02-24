@@ -156,11 +156,9 @@ impl Compressor {
                     //self.sink.write_all(&buf[..read]).await?; // Payload chunk.
                 }
 
-                zencoder.flush()?;
+                let compressed_stream = zencoder.finish()?;
 
-                let hello = zencoder.finish()?;
-
-                writer.write_all(&hello).await?;
+                writer.write_all(&compressed_stream).await?;
                 writer.flush().await?;
 
                 Ok(total_read)

@@ -42,10 +42,10 @@ fn zip_test() -> Result<(), std::io::Error> {
 
     let path = Path::new("tests").join(FILE_TO_COMPRESS);
 
-    let mut f = File::open(&path)?;
+    let mut file_to_compress = File::open(path)?;
 
     let mut buffer = Vec::new();
-    f.read_to_end(&mut buffer)?;
+    file_to_compress.read_to_end(&mut buffer)?;
     zip.write_all(&buffer)?;
     buffer.clear();
 
