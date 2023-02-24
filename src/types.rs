@@ -95,13 +95,13 @@ impl fmt::Display for ArchiveFileEntry {
         let label = if compressor.is_unknown() {
             let str_val = self.compression_method.to_string();
 
-            let mut val = String::from(compressor.label());
+            let mut val = String::from(compressor.compression_method_label());
             val.push_str(" (");
             val.push_str(&str_val);
             val.push(')');
             val
         } else {
-            compressor.label().to_owned()
+            compressor.compression_method_label().to_owned()
         };
         writeln!(f, "{: <padding$}{}", "compression method:", label)?;
 

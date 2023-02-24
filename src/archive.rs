@@ -51,7 +51,7 @@ impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
     }
 
     pub fn get_archive_size(&self) -> usize {
-        self.sink.get_compress_length()
+        self.sink.get_written_bytes_count()
     }
 
     pub fn update_written_bytes_count(&mut self, nb_bytes: u32) {
@@ -162,36 +162,32 @@ impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
         file_header.write_u16(file_name_len);
         file_header.write_u16(extra_field_length);
         file_header.write_bytes(&file_name_as_bytes_own);
-        let file_header_bytes = file_header.finish();
 
-        self.sink.write_all(&file_header_bytes).await?;
-        //self.sink.flush().await?;
-        self.update_written_bytes_count(file_header_bytes.len() as u32);
+        self.sink.write_all(file_header.buffer()).await?;
+        self.update_written_bytes_count(file_header.len() as u32);
 
         let mut hasher = Hasher::new();
-        let cur_size = self.sink.get_compress_length();
+        let cur_size = self.sink.get_written_bytes_count();
 
         let uncompressed_size = compressor
             .compress(&mut self.sink, reader, &mut hasher)
             .await?;
 
         //self.sink.flush().await?;
-        let compressed_size = self.sink.get_compress_length() - cur_size;
-
+        let compressed_size = self.sink.get_written_bytes_count() - cur_size;
         self.update_written_bytes_count(compressed_size as u32);
 
         let crc32 = hasher.finalize();
 
-        let descriptor = header![
-            DESCRIPTOR_SIZE;
-            DATA_DESCRIPTOR_SIGNATURE,      // Data descriptor signature.
-            crc32,                // CRC32.
-            compressed_size as u32,  // Compressed size.
-            uncompressed_size as u32,  // Uncompressed size.
-        ];
-        self.sink.write_all(&descriptor).await?;
+        let mut file_descriptor = ArchiveDescriptor::new(DESCRIPTOR_SIZE);
+        file_descriptor.write_u32(DATA_DESCRIPTOR_SIGNATURE); // Data descriptor signature.
+        file_descriptor.write_u32(crc32); // CRC32.
+        file_descriptor.write_u32(compressed_size as u32); // Compressed size.
+        file_descriptor.write_u32(uncompressed_size as u32); // Uncompressed size.
 
-        self.update_written_bytes_count(descriptor.len() as u32);
+        self.sink.write_all(file_descriptor.buffer()).await?;
+
+        self.update_written_bytes_count(file_descriptor.len() as u32);
 
         self.files_info.push(ArchiveFileEntry {
             file_name_as_bytes: file_name_as_bytes_own,

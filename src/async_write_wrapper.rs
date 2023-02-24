@@ -4,19 +4,19 @@ use tokio::io::AsyncWrite;
 #[derive(Debug)]
 pub struct AsyncWriteWrapper<W: AsyncWrite + Unpin> {
     writer: W,
-    compress_length: usize,
+    written_bytes_count: usize,
 }
 
 impl<W: AsyncWrite + Unpin> AsyncWriteWrapper<W> {
     pub fn new(w: W) -> AsyncWriteWrapper<W> {
         Self {
             writer: w,
-            compress_length: 0,
+            written_bytes_count: 0,
         }
     }
 
-    pub fn get_compress_length(&self) -> usize {
-        self.compress_length
+    pub fn get_written_bytes_count(&self) -> usize {
+        self.written_bytes_count
     }
 
     pub fn retrieve_writer(self) -> W {
@@ -36,7 +36,7 @@ impl<W: AsyncWrite + Unpin> AsyncWrite for AsyncWriteWrapper<W> {
 
         results.map(|pool_result| match pool_result {
             Ok(nb_byte_written) => {
-                wrapper.compress_length += nb_byte_written;
+                wrapper.written_bytes_count += nb_byte_written;
                 Ok(nb_byte_written)
             }
             Err(e) => Err(e),

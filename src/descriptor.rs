@@ -36,6 +36,18 @@ impl ArchiveDescriptor {
         self.buffer
     }
 
+    pub fn len(&self) -> usize {
+        self.buffer.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    pub fn buffer(&self) -> &[u8] {
+        &self.buffer
+    }
+
     pub fn read_file_descriptor(stream: &[u8]) -> ArchiveFileEntry {
         let mut indexer = ArchiveDescriptorReader::new();
 

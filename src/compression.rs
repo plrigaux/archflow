@@ -6,6 +6,7 @@ use async_compression::tokio::write::ZstdEncoder;
 use crc32fast::Hasher;
 use flate2::write::ZlibEncoder as ZlibEncoderFlate;
 use flate2::Compression;
+use std::fmt::Display;
 use std::io::Error as IoError;
 use std::io::Write;
 use tokio::io::AsyncRead;
@@ -63,12 +64,12 @@ impl Compressor {
         }
     }
 
-    pub fn label(&self) -> &str {
+    pub fn compression_method_label(&self) -> &str {
         // higher versions matched first
         match self {
             Compressor::Store() => "store",
             Compressor::Deflated() => "deflate",
-            Compressor::DeflatedFate2() => todo!(),
+            Compressor::DeflatedFate2() => "deflate",
             Compressor::BZip2() => "bzip2",
             Compressor::Zstd() => "zstd",
             Compressor::Xz() => "xz",
@@ -231,5 +232,11 @@ impl Compressor {
 
     pub fn is_unknown(&self) -> bool {
         matches!(self, Compressor::Unknown(_))
+    }
+}
+
+impl Display for Compressor {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.compression_method_label())
     }
 }
