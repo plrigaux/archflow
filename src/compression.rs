@@ -39,7 +39,7 @@ impl Compressor {
             Compressor::DeflatedFate2() => DEFALTE,
             Compressor::Zstd() => ZSTD,
             Compressor::Xz() => XZ,
-            Compressor::Unknown(cm) => *cm,
+            Compressor::Unknown(compression_method) => *compression_method,
         }
     }
 
@@ -223,8 +223,8 @@ impl Compressor {
 
                 Ok(total_read)
             }
-            Compressor::Unknown(cm) => {
-                panic!("Unsupported compressor, compression method: {:?}", cm)
+            Compressor::Unknown(compression_method) => {
+                panic!("unsupported compression method {:?}", compression_method)
             }
         }
     }

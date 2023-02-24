@@ -16,7 +16,7 @@ pub struct ArchiveFileEntry {
     pub uncompressed_size: u32,
     pub file_name_len: u16,
     pub extra_field_length: u16,
-    pub file_name: String,
+    pub file_name_as_bytes: Vec<u8>,
     pub offset: u32,
     pub compressor: Compressor,
 }

@@ -25,7 +25,11 @@ impl ArchiveDescriptor {
     }
 
     pub fn write_str(&mut self, val: &str) {
-        self.buffer.extend_from_slice(val.as_bytes());
+        self.write_bytes(val.as_bytes());
+    }
+
+    pub fn write_bytes(&mut self, val: &[u8]) {
+        self.buffer.extend_from_slice(val);
     }
 
     pub fn finish(self) -> Vec<u8> {
@@ -48,6 +52,8 @@ impl ArchiveDescriptor {
         let extra_field_length = indexer.read_u16(stream);
         let file_name = indexer.read_utf8_string(stream, file_name_len as usize);
 
+        let file_name_as_bytes = file_name.as_bytes().to_owned();
+
         ArchiveFileEntry {
             version_needed,
             general_purpose_flags,
@@ -58,7 +64,7 @@ impl ArchiveDescriptor {
             uncompressed_size,
             file_name_len,
             extra_field_length,
-            file_name,
+            file_name_as_bytes,
             offset: 0,
 
             compression_method,
@@ -137,7 +143,7 @@ mod test {
     #[test]
     fn test_write_file_header() {
         let version_needed = Compressor::Deflated().version_needed();
-        let compressor_method = Compressor::Deflated().compression_method();
+        let compression_method = Compressor::Deflated().compression_method();
         let general_purpose_flags: u16 = 1 << 3 | 1 << 11;
         let time = 0u16;
         let date = 0u16;
@@ -154,7 +160,7 @@ mod test {
         desc.write_u32(LOCAL_FILE_HEADER_SIGNATURE);
         desc.write_u16(version_needed);
         desc.write_u16(general_purpose_flags);
-        desc.write_u16(compressor_method);
+        desc.write_u16(compression_method);
         desc.write_u16(time);
         desc.write_u16(date);
         desc.write_u32(crc);

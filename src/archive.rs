@@ -120,15 +120,20 @@ impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
         let compression_method = compressor.compression_method();
 
         let file_len: u16 = file_name.as_bytes().len() as u16;
-        let general_purpose_flags: u16 = 1 << 3 | 1 << 11;
-
-        let mut file_header = ArchiveDescriptor::new(FILE_HEADER_BASE_SIZE + file_len as usize);
 
         let extra_field_length = 0u16;
         let version_needed = compressor.version_needed();
-        file_header.write_u32(LOCAL_FILE_HEADER_SIGNATURE);
 
-        let mut header = header![
+        let file_nameas_bytes = file_name.as_bytes();
+        let file_name_as_bytes_own = file_nameas_bytes.to_owned();
+        let file_name_len = file_name_as_bytes_own.len() as u16;
+
+        let mut general_purpose_flags: u16 = 1 << 3;
+        if file_name_as_bytes_own.len() > file_name.len() {
+            general_purpose_flags |= 1 << 11; //set utf8 flag
+        }
+
+        /*         let mut header = header![
             FILE_HEADER_BASE_SIZE + file_len as usize;
             LOCAL_FILE_HEADER_SIGNATURE,          // Local file header signature.
             version_needed,                  // Version needed to extract.
@@ -141,42 +146,59 @@ impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
             0u32,                   // Temporary uncompressed size.
             file_len,      // Filename length.
             extra_field_length,                   // Extra field length.
-        ];
-        header.extend_from_slice(file_name.as_bytes()); // Filename.
-        self.sink.write_all(&header).await?;
+        ]; */
+
+        let mut file_header =
+            ArchiveDescriptor::new(FILE_HEADER_BASE_SIZE + file_name_len as usize);
+        file_header.write_u32(LOCAL_FILE_HEADER_SIGNATURE);
+        file_header.write_u16(version_needed);
+        file_header.write_u16(general_purpose_flags);
+        file_header.write_u16(compression_method);
+        file_header.write_u16(time);
+        file_header.write_u16(date);
+        file_header.write_u32(0u32);
+        file_header.write_u32(0u32);
+        file_header.write_u32(0u32);
+        file_header.write_u16(file_name_len);
+        file_header.write_u16(extra_field_length);
+        file_header.write_bytes(&file_name_as_bytes_own);
+        let file_header_bytes = file_header.finish();
+
+        self.sink.write_all(&file_header_bytes).await?;
         //self.sink.flush().await?;
-        self.update_written_bytes_count(header.len() as u32);
+        self.update_written_bytes_count(file_header_bytes.len() as u32);
+
         let mut hasher = Hasher::new();
         let cur_size = self.sink.get_compress_length();
 
-        let total_read = compressor
+        let uncompressed_size = compressor
             .compress(&mut self.sink, reader, &mut hasher)
             .await?;
 
         //self.sink.flush().await?;
-        let total_compress = self.sink.get_compress_length() - cur_size;
+        let compressed_size = self.sink.get_compress_length() - cur_size;
 
-        self.update_written_bytes_count(total_compress as u32);
+        self.update_written_bytes_count(compressed_size as u32);
 
-        let crc = hasher.finalize();
+        let crc32 = hasher.finalize();
 
         let descriptor = header![
             DESCRIPTOR_SIZE;
             DATA_DESCRIPTOR_SIGNATURE,      // Data descriptor signature.
-            crc,                // CRC32.
-            total_compress as u32,  // Compressed size.
-            total_read as u32,  // Uncompressed size.
+            crc32,                // CRC32.
+            compressed_size as u32,  // Compressed size.
+            uncompressed_size as u32,  // Uncompressed size.
         ];
         self.sink.write_all(&descriptor).await?;
 
         self.update_written_bytes_count(descriptor.len() as u32);
 
         self.files_info.push(ArchiveFileEntry {
-            file_name: file_name.to_owned(),
+            file_name_as_bytes: file_name_as_bytes_own,
             file_name_len: file_len,
-            uncompressed_size: total_read as u32,
-            compressed_size: total_compress as u32,
-            crc,
+            uncompressed_size: uncompressed_size as u32,
+            compressed_size: compressed_size as u32,
+            crc: crc32,
             offset,
             last_mod_file_time: time,
             last_mod_file_date: date,
@@ -247,7 +269,7 @@ impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
         self.update_written_bytes_count(total_compress as u32);
 
         self.files_info.push(ArchiveFileEntry {
-            file_name: file_name.to_owned(),
+            file_name_as_bytes: file_name.as_bytes().to_owned(),
             file_name_len: file_len as u16,
             compressed_size: total_compress as u32,
             uncompressed_size: total_read as u32,
@@ -300,7 +322,7 @@ impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
                 (0o100644 << 16) as u32, // External file attributes (regular file / rw-r--r--).
                 file_info.offset,        // Offset from start of file to local file header.
             ];
-            entry.extend_from_slice(file_info.file_name.as_bytes()); // Filename.
+            entry.extend_from_slice(&file_info.file_name_as_bytes); // Filename.
             self.sink.write_all(&entry).await?;
             central_directory_size += entry.len();
         }
