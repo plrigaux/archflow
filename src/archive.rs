@@ -20,7 +20,6 @@ pub const VERSION_MADE_BY: u16 = (UNIX as u16) << 8 | DEFAULT_VERSION as u16;
 pub struct Archive<W: tokio::io::AsyncWrite + Unpin> {
     sink: AsyncWriteWrapper<W>,
     files_info: Vec<ArchiveFileEntry>,
-    written_bytes_count: u32,
 }
 
 impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
@@ -30,7 +29,6 @@ impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
         Self {
             sink: AsyncWriteWrapper::new(sink_),
             files_info: Vec::new(),
-            written_bytes_count: 0,
         }
     }
 
@@ -42,9 +40,6 @@ impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
         self.sink.get_written_bytes_count()
     }
 
-    pub fn update_written_bytes_count(&mut self, nb_bytes: u32) {
-        self.written_bytes_count += nb_bytes;
-    }
     /// Append a new file to the archive using the provided name, date/time and `AsyncRead` object.  
     /// Filename must be valid UTF-8. Some (very) old zip utilities might mess up filenames during extraction if they contain non-ascii characters.  
     /// File's payload is not compressed and is given `rw-r--r--` permissions.
@@ -103,7 +98,7 @@ impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
         R: AsyncRead + Unpin,
     {
         let (date, time) = datetime.ms_dos();
-        let offset = self.written_bytes_count;
+        let offset = self.sink.get_written_bytes_count() as u32;
 
         let compression_method = compressor.compression_method();
 
@@ -137,7 +132,6 @@ impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
         file_header.write_bytes(&file_name_as_bytes_own);
 
         self.sink.write_all(file_header.buffer()).await?;
-        self.update_written_bytes_count(file_header.len() as u32);
 
         let mut hasher = Hasher::new();
         let cur_size = self.sink.get_written_bytes_count();
@@ -148,7 +142,6 @@ impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
 
         //self.sink.flush().await?;
         let compressed_size = self.sink.get_written_bytes_count() - cur_size;
-        self.update_written_bytes_count(compressed_size as u32);
 
         let crc32 = hasher.finalize();
 
@@ -159,8 +152,6 @@ impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
         file_descriptor.write_u32(uncompressed_size as u32);
 
         self.sink.write_all(file_descriptor.buffer()).await?;
-
-        self.update_written_bytes_count(file_descriptor.len() as u32);
 
         self.files_info.push(ArchiveFileEntry {
             file_name_as_bytes: file_name_as_bytes_own,
@@ -193,7 +184,7 @@ impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
         R: AsyncRead + Unpin,
     {
         let (date, time) = datetime.ms_dos();
-        let offset = self.written_bytes_count;
+        let offset = self.sink.get_written_bytes_count() as u32;
 
         let compression_method = compressor.compression_method();
 
@@ -237,10 +228,8 @@ impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
         file_header.write_bytes(&file_name_as_bytes_own);
 
         self.sink.write_all(file_header.buffer()).await?;
-        self.update_written_bytes_count(file_header.len() as u32);
 
         self.sink.write_all(&retreived_buffer).await?;
-        self.update_written_bytes_count(compressed_size);
 
         self.files_info.push(ArchiveFileEntry {
             file_name_as_bytes: file_name.as_bytes().to_owned(),
@@ -274,13 +263,12 @@ impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
     where
         W: AsyncWrite + Unpin,
     {
-        let central_directory_offset = self.written_bytes_count;
-        let mut central_directory_size = 0u32;
-        for file_info in &self.files_info {
-            let mut central_directory_header = ArchiveDescriptor::new(
-                CENTRAL_DIRECTORY_ENTRY_BASE_SIZE + file_info.file_name_len as usize,
-            );
+        let central_directory_offset = self.sink.get_written_bytes_count() as u32;
 
+        let mut central_directory_header =
+            ArchiveDescriptor::new(CENTRAL_DIRECTORY_ENTRY_BASE_SIZE + 200);
+
+        for file_info in &self.files_info {
             central_directory_header.write_u32(CENTRAL_DIRECTORY_ENTRY_SIGNATURE); // Central directory entry signature.
             central_directory_header.write_u16(file_info.version_made_by()); // Version made by.
             central_directory_header.write_u16(file_info.version_needed()); // Version needed to extract.
@@ -304,8 +292,11 @@ impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
                 .write_all(central_directory_header.buffer())
                 .await?;
 
-            central_directory_size += central_directory_header.len() as u32;
+            central_directory_header.clear();
         }
+
+        let central_directory_size =
+            self.sink.get_written_bytes_count() as u32 - central_directory_offset;
 
         let dir_end = CentralDirectoryEnd {
             disk_number: 0,

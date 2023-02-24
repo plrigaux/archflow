@@ -83,6 +83,10 @@ impl ArchiveDescriptor {
             compressor: Compressor::from_compression_method(compression_method),
         }
     }
+
+    pub fn clear(&mut self) {
+        self.buffer.clear();
+    }
 }
 
 struct ArchiveDescriptorReader {
