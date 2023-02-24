@@ -133,21 +133,6 @@ impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
             general_purpose_flags |= 1 << 11; //set utf8 flag
         }
 
-        /*         let mut header = header![
-            FILE_HEADER_BASE_SIZE + file_len as usize;
-            LOCAL_FILE_HEADER_SIGNATURE,          // Local file header signature.
-            version_needed,                  // Version needed to extract.
-            general_purpose_flags,    // General purpose flag (temporary crc and sizes + UTF-8 filename).
-            compression_method,     // Compression method .
-            time,                   // Modification time.
-            date,                   // Modification date.
-            0u32,                   // Temporary CRC32.
-            0u32,                   // Temporary compressed size.
-            0u32,                   // Temporary uncompressed size.
-            file_len,      // Filename length.
-            extra_field_length,                   // Extra field length.
-        ]; */
-
         let mut file_header =
             ArchiveDescriptor::new(FILE_HEADER_BASE_SIZE + file_name_len as usize);
         file_header.write_u32(LOCAL_FILE_HEADER_SIGNATURE);
@@ -180,10 +165,10 @@ impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
         let crc32 = hasher.finalize();
 
         let mut file_descriptor = ArchiveDescriptor::new(DESCRIPTOR_SIZE);
-        file_descriptor.write_u32(DATA_DESCRIPTOR_SIGNATURE); // Data descriptor signature.
-        file_descriptor.write_u32(crc32); // CRC32.
-        file_descriptor.write_u32(compressed_size as u32); // Compressed size.
-        file_descriptor.write_u32(uncompressed_size as u32); // Uncompressed size.
+        file_descriptor.write_u32(DATA_DESCRIPTOR_SIGNATURE);
+        file_descriptor.write_u32(crc32);
+        file_descriptor.write_u32(compressed_size as u32);
+        file_descriptor.write_u32(uncompressed_size as u32);
 
         self.sink.write_all(file_descriptor.buffer()).await?;
 
@@ -194,7 +179,7 @@ impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
             file_name_len: file_len,
             uncompressed_size: uncompressed_size as u32,
             compressed_size: compressed_size as u32,
-            crc: crc32,
+            crc32,
             offset,
             last_mod_file_time: time,
             last_mod_file_date: date,
@@ -269,7 +254,7 @@ impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
             file_name_len: file_len as u16,
             compressed_size: total_compress as u32,
             uncompressed_size: total_read as u32,
-            crc,
+            crc32: crc,
             offset,
             last_mod_file_time: time,
             last_mod_file_date: date,
@@ -304,10 +289,10 @@ impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
                 file_info.version_made_by(),                      // Version made by.
                 file_info.version_needed(),                          // Version needed to extract.
                 file_info.general_purpose_flags,            // General purpose flag (temporary crc and sizes + UTF-8 filename).
-                file_info.compressor.compression_method(),       // Compression method .
+                file_info.compression_method,       // Compression method .
                 file_info.last_mod_file_time,           // Modification time.
                 file_info.last_mod_file_date,           // Modification date.
-                file_info.crc,                  // CRC32.
+                file_info.crc32,                  // CRC32.
                 file_info.compressed_size,          // Compressed size.
                 file_info.uncompressed_size,          // Uncompressed size.
                 file_info.file_name_len,    // Filename length.
@@ -339,11 +324,11 @@ impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
         let dir_end = CentralDirectoryEnd {
             disk_number: 0,
             disk_with_central_directory: 0,
-            number_of_files_on_this_disk: self.files_info.len() as u16,
-            number_of_files: self.files_info.len() as u16,
+            total_number_of_entries_on_this_disk: self.files_info.len() as u16,
+            total_number_of_entries: self.files_info.len() as u16,
             central_directory_size: central_directory_size as u32,
             central_directory_offset: self.written_bytes_count,
-            zip_file_comment_len: 0,
+            zip_file_comment_length: 0,
         };
 
         dir_end.write(&mut self.sink).await?;
@@ -357,11 +342,11 @@ impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
 pub struct CentralDirectoryEnd {
     pub disk_number: u16,
     pub disk_with_central_directory: u16,
-    pub number_of_files_on_this_disk: u16,
-    pub number_of_files: u16,
+    pub total_number_of_entries_on_this_disk: u16,
+    pub total_number_of_entries: u16,
     pub central_directory_size: u32,
     pub central_directory_offset: u32,
-    pub zip_file_comment_len: u16,
+    pub zip_file_comment_length: u16,
 }
 
 impl CentralDirectoryEnd {
@@ -369,20 +354,17 @@ impl CentralDirectoryEnd {
         &self,
         writer: &mut AsyncWriteWrapper<W>,
     ) -> Result<(), IoError> {
-        let end_of_central_directory = header![
-            END_OF_CENTRAL_DIRECTORY_SIZE;
-            CENTRAL_DIRECTORY_END_SIGNATURE,                  // End of central directory signature.
-            self.disk_number,                           // Number of this disk.
-            self.disk_with_central_directory,                           // Number of the disk where central directory starts.
-            self.number_of_files_on_this_disk,   // Number of central directory records on this disk.
-            self.number_of_files,                // Total number of central directory records.
-            self.central_directory_size,         // Size of central directory.
-            self.central_directory_offset,            // Offset from start of file to central directory.
-            self.zip_file_comment_len,                           // Comment length.
+        let mut end_of_central_directory = ArchiveDescriptor::new(END_OF_CENTRAL_DIRECTORY_SIZE);
+        end_of_central_directory.write_u32(CENTRAL_DIRECTORY_END_SIGNATURE);
+        end_of_central_directory.write_u16(self.disk_number);
+        end_of_central_directory.write_u16(self.disk_with_central_directory);
+        end_of_central_directory.write_u16(self.total_number_of_entries_on_this_disk);
+        end_of_central_directory.write_u16(self.total_number_of_entries);
+        end_of_central_directory.write_u32(self.central_directory_size);
+        end_of_central_directory.write_u32(self.central_directory_offset);
+        end_of_central_directory.write_u16(self.zip_file_comment_length);
 
-        ];
-
-        writer.write_all(&end_of_central_directory).await?;
+        writer.write_all(end_of_central_directory.buffer()).await?;
 
         Ok(())
     }

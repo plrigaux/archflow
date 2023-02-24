@@ -11,7 +11,7 @@ pub struct ArchiveFileEntry {
     pub compression_method: u16,
     pub last_mod_file_time: u16,
     pub last_mod_file_date: u16,
-    pub crc: u32,
+    pub crc32: u32,
     pub compressed_size: u32,
     pub uncompressed_size: u32,
     pub file_name_len: u16,
@@ -136,7 +136,11 @@ impl fmt::Display for ArchiveFileEntry {
             "file last modified on (DOS date/time):", date_time
         )?;
 
-        writeln!(f, "{: <padding$}{:x}", "32-bit CRC value (hex):", self.crc)?;
+        writeln!(
+            f,
+            "{: <padding$}{:x}",
+            "32-bit CRC value (hex):", self.crc32
+        )?;
 
         writeln!(
             f,

@@ -71,7 +71,7 @@ impl ArchiveDescriptor {
             general_purpose_flags,
             last_mod_file_time: time,
             last_mod_file_date: date,
-            crc,
+            crc32: crc,
             compressed_size,
             uncompressed_size,
             file_name_len,
