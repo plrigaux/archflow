@@ -169,7 +169,7 @@ pub enum FileDateTime {
 impl FileDateTime {
     fn tuple(&self) -> (u16, u16, u16, u16, u16, u16) {
         match self {
-            FileDateTime::Zero => Default::default(),
+            FileDateTime::Zero => (1980, 1, 1, 0, 1, 30),
             &FileDateTime::Custom {
                 year,
                 month,

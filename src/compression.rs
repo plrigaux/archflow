@@ -139,7 +139,7 @@ impl Compressor {
 
             Compressor::DeflateFate2() => {
                 //TODO chage vec to stream
-                let mut zencoder = ZlibEncoderFlate::new(Vec::new(), Compression::default());
+                let mut encoder = ZlibEncoderFlate::new(Vec::new(), Compression::default());
 
                 let mut buf = vec![0; 4096];
                 let mut total_read = 0;
@@ -152,14 +152,18 @@ impl Compressor {
 
                     total_read += read;
                     hasher.update(&buf[..read]);
-                    zencoder.write_all(&buf[..read])?;
+                    encoder.write_all(&buf[..read])?;
                     //self.sink.write_all(&buf[..read]).await?; // Payload chunk.
                 }
 
-                let compressed_stream = zencoder.finish()?;
+                encoder.flush()?;
+
+                let compressed_stream = encoder.finish()?;
 
                 writer.write_all(&compressed_stream).await?;
                 writer.flush().await?;
+
+                //writer.write(&compressed_stream).await?;
 
                 Ok(total_read)
             }
@@ -262,5 +266,70 @@ impl Compressor {
 impl Display for Compressor {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.compression_method_label())
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_defate_basic() {
+        let x = b"example";
+        let mut e = ZlibEncoder::new(Vec::new());
+        e.write_all(x).await.unwrap();
+        e.flush().await.unwrap();
+        e.shutdown().await.unwrap();
+        let temp = e.into_inner();
+        println!("{:?}", temp);
+        // [120, 156, 74, 173, 72, 204, 45, 200, 73, 5, 0, 0, 0, 255, 255]
+        // import zlib; print(zlib.decompress(bytes([120, 156, 74, 173, 72, 204, 45, 200, 73, 5, 0, 0, 0, 255, 255])))
+        // fail with:
+        // Traceback (most recent call last):
+        //   File "test.py", line 25, in <module>
+        //     print(zlib.decompress(bytes([120, 156, 74, 173, 72, 204, 45, 200, 73, 5, 0, 0, 0, 255, 255])))
+        // zlib.error: Error -5 while decompressing data: incomplete or truncated stream
+
+        // Working code with flate2
+        let mut encoder = ZlibEncoderFlate::new(Vec::new(), flate2::Compression::default());
+        encoder.write_all(x).unwrap();
+        encoder.flush().unwrap();
+        let temp = encoder.finish().unwrap();
+        println!("{:?}", temp);
+        // [120, 1, 0, 7, 0, 248, 255, 101, 120, 97, 109, 112, 108, 101, 0, 0, 0, 255, 255, 3, 0, 11, 192, 2, 237]
+        // import zlib; print(zlib.decompress(bytes([120, 1, 0, 7, 0, 248, 255, 101, 120, 97, 109, 112, 108, 101, 0, 0, 0, 255, 255, 3, 0, 11, 192, 2, 237])))
+        // prints b'example`
+    }
+
+    #[tokio::test]
+    async fn test_defate_compressor() {
+        let x = b"example";
+
+        let compressor = Compressor::Deflate();
+        let mut hasher = Hasher::new();
+
+        //let a: AsyncRead = &x;
+        let mut writer = AsyncWriteWrapper::new(Vec::new());
+        compressor
+            .compress(&mut writer, &mut x.as_ref(), &mut hasher)
+            .await
+            .unwrap();
+
+        println!("{:?}", writer.retrieve_writer());
+
+        let compressor = Compressor::DeflateFate2();
+        let mut hasher = Hasher::new();
+
+        //let a: AsyncRead = &x;
+        let mut writer = AsyncWriteWrapper::new(Vec::new());
+        compressor
+            .compress(&mut writer, &mut x.as_ref(), &mut hasher)
+            .await
+            .unwrap();
+
+        println!("{:?}", writer.retrieve_writer());
+
+        //   import zlib; print(zlib.decompress(bytes([120, 1, 0, 7, 0, 248, 255, 101, 120, 97, 109, 112, 108, 101, 0, 0, 0, 255, 255, 3, 0, 11, 192, 2, 237])))
+        //prints b'example`
     }
 }

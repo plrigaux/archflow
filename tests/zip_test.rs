@@ -27,15 +27,37 @@ fn create_new_clean_file_std(file_name: &str) -> std::fs::File {
 const FILE_TO_COMPRESS: &str = "short_text_file.txt";
 
 #[test]
+fn store_test() -> Result<(), std::io::Error> {
+    base_test("test_zrust_store.zip", zip::CompressionMethod::Stored)
+}
+
+#[test]
 fn zip_test() -> Result<(), std::io::Error> {
-    let file = create_new_clean_file_std("test__rust_zip.zip");
+    base_test("test_zrust_zip.zip", zip::CompressionMethod::Deflated)
+}
+
+#[test]
+fn bzip_test() -> Result<(), std::io::Error> {
+    base_test("test_zrust_bzip.zip", zip::CompressionMethod::Bzip2)
+}
+
+#[test]
+fn zstd_test() -> Result<(), std::io::Error> {
+    base_test("test_zrust_zstd.zip", zip::CompressionMethod::Zstd)
+}
+
+fn base_test(
+    out_file_name: &str,
+    compression_method: zip::CompressionMethod,
+) -> Result<(), std::io::Error> {
+    let file = create_new_clean_file_std(out_file_name);
 
     let mut zip = ZipWriter::new(file);
 
     //zip.add_directory("test/", Default::default())?;
 
     let options = FileOptions::default()
-        .compression_method(zip::CompressionMethod::Deflated)
+        .compression_method(compression_method)
         .last_modified_time(DateTime::default());
 
     zip.start_file(FILE_TO_COMPRESS, options)?;
@@ -47,7 +69,6 @@ fn zip_test() -> Result<(), std::io::Error> {
     let mut buffer = Vec::new();
     file_to_compress.read_to_end(&mut buffer)?;
     zip.write_all(&buffer)?;
-    buffer.clear();
 
     zip.finish()?;
 
