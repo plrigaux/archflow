@@ -74,3 +74,27 @@ fn base_test(
 
     Ok(())
 }
+
+#[test]
+fn str_deflate_test() -> Result<(), std::io::Error> {
+    let compression_method = zip::CompressionMethod::Zstd;
+    let out_file_name = "test_deflate_str.zip";
+
+    let file = create_new_clean_file_std(out_file_name);
+
+    let mut zip = ZipWriter::new(file);
+
+    //zip.add_directory("test/", Default::default())?;
+
+    let options = FileOptions::default()
+        .compression_method(compression_method)
+        .last_modified_time(DateTime::default());
+
+    zip.start_file("example.txt", options)?;
+    let data = b"Example";
+    zip.write_all(data.as_ref())?;
+
+    zip.finish()?;
+
+    Ok(())
+}

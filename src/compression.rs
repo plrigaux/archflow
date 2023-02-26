@@ -282,6 +282,9 @@ mod test {
         e.shutdown().await.unwrap();
         let temp = e.into_inner();
         println!("{:?}", temp);
+
+        // [0x74, 78 9C 4A AD 48 CC 2D C8 49 05 00 00 00 FF FF 03 00 0B C0 02 ED]
+
         // [120, 156, 74, 173, 72, 204, 45, 200, 73, 5, 0, 0, 0, 255, 255]
         // import zlib; print(zlib.decompress(bytes([120, 156, 74, 173, 72, 204, 45, 200, 73, 5, 0, 0, 0, 255, 255])))
         // fail with:
@@ -295,7 +298,7 @@ mod test {
         encoder.write_all(x).unwrap();
         encoder.flush().unwrap();
         let temp = encoder.finish().unwrap();
-        println!("{:?}", temp);
+        println!("{:X?}", temp);
         // [120, 1, 0, 7, 0, 248, 255, 101, 120, 97, 109, 112, 108, 101, 0, 0, 0, 255, 255, 3, 0, 11, 192, 2, 237]
         // import zlib; print(zlib.decompress(bytes([120, 1, 0, 7, 0, 248, 255, 101, 120, 97, 109, 112, 108, 101, 0, 0, 0, 255, 255, 3, 0, 11, 192, 2, 237])))
         // prints b'example`
@@ -315,7 +318,7 @@ mod test {
             .await
             .unwrap();
 
-        println!("{:?}", writer.retrieve_writer());
+        println!("{:X?}", writer.retrieve_writer());
 
         let compressor = Compressor::DeflateFate2();
         let mut hasher = Hasher::new();
@@ -327,9 +330,12 @@ mod test {
             .await
             .unwrap();
 
-        println!("{:?}", writer.retrieve_writer());
+        println!("{:X?}", writer.retrieve_writer());
 
         //   import zlib; print(zlib.decompress(bytes([120, 1, 0, 7, 0, 248, 255, 101, 120, 97, 109, 112, 108, 101, 0, 0, 0, 255, 255, 3, 0, 11, 192, 2, 237])))
         //prints b'example`
     }
 }
+
+//74 78 9C 4A AD 48 CC 2D C8 49 05 00 00 00 FF FF 03 00 0B C0 02 ED
+
