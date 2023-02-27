@@ -160,7 +160,9 @@ impl Compressor {
 
                 let compressed_stream = encoder.finish()?;
 
-                writer.write_all(&compressed_stream).await?;
+                writer
+                    .write_all(&compressed_stream[2..compressed_stream.len() - 4])
+                    .await?;
                 writer.flush().await?;
 
                 //writer.write(&compressed_stream).await?;
@@ -281,7 +283,8 @@ mod test {
         e.flush().await.unwrap();
         e.shutdown().await.unwrap();
         let temp = e.into_inner();
-        println!("{:?}", temp);
+        println!("compress len {:?}", temp.len());
+        println!("{:#02X?}", temp);
 
         // [0x74, 78 9C 4A AD 48 CC 2D C8 49 05 00 00 00 FF FF 03 00 0B C0 02 ED]
 
@@ -298,6 +301,7 @@ mod test {
         encoder.write_all(x).unwrap();
         encoder.flush().unwrap();
         let temp = encoder.finish().unwrap();
+        println!("compress len {:?}", temp.len());
         println!("{:X?}", temp);
         // [120, 1, 0, 7, 0, 248, 255, 101, 120, 97, 109, 112, 108, 101, 0, 0, 0, 255, 255, 3, 0, 11, 192, 2, 237]
         // import zlib; print(zlib.decompress(bytes([120, 1, 0, 7, 0, 248, 255, 101, 120, 97, 109, 112, 108, 101, 0, 0, 0, 255, 255, 3, 0, 11, 192, 2, 237])))
@@ -318,7 +322,9 @@ mod test {
             .await
             .unwrap();
 
-        println!("{:X?}", writer.retrieve_writer());
+        let temp = writer.retrieve_writer();
+        println!("compress len {:?}", temp.len());
+        println!("{:X?}", temp);
 
         let compressor = Compressor::DeflateFate2();
         let mut hasher = Hasher::new();
@@ -330,7 +336,9 @@ mod test {
             .await
             .unwrap();
 
-        println!("{:X?}", writer.retrieve_writer());
+        let temp = writer.retrieve_writer();
+        println!("compress len {:?}", temp.len());
+        println!("{:X?}", temp);
 
         //   import zlib; print(zlib.decompress(bytes([120, 1, 0, 7, 0, 248, 255, 101, 120, 97, 109, 112, 108, 101, 0, 0, 0, 255, 255, 3, 0, 11, 192, 2, 237])))
         //prints b'example`
@@ -338,4 +346,3 @@ mod test {
 }
 
 //74 78 9C 4A AD 48 CC 2D C8 49 05 00 00 00 FF FF 03 00 0B C0 02 ED
-

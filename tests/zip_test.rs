@@ -24,7 +24,7 @@ fn create_new_clean_file_std(file_name: &str) -> std::fs::File {
     })
 }
 
-const FILE_TO_COMPRESS: &str = "short_text_file.txt";
+const FILE_TO_COMPRESS: &str = "ex.txt";
 
 #[test]
 fn store_test() -> Result<(), std::io::Error> {
@@ -33,7 +33,7 @@ fn store_test() -> Result<(), std::io::Error> {
 
 #[test]
 fn zip_test() -> Result<(), std::io::Error> {
-    base_test("test_zrust_zip.zip", zip::CompressionMethod::Deflated)
+    base_test("test_zrust_deflate.zip", zip::CompressionMethod::Deflated)
 }
 
 #[test]
@@ -44,6 +44,11 @@ fn bzip_test() -> Result<(), std::io::Error> {
 #[test]
 fn zstd_test() -> Result<(), std::io::Error> {
     base_test("test_zrust_zstd.zip", zip::CompressionMethod::Zstd)
+}
+
+#[test]
+fn deflate_ex_test() -> Result<(), std::io::Error> {
+    base_test("test_ex_deflate.zip", zip::CompressionMethod::Zstd)
 }
 
 fn base_test(
@@ -62,14 +67,15 @@ fn base_test(
 
     zip.start_file(FILE_TO_COMPRESS, options)?;
 
-    let path = Path::new("tests").join(FILE_TO_COMPRESS);
+    let path = Path::new("tests/resources").join(FILE_TO_COMPRESS);
 
     let mut file_to_compress = File::open(path)?;
 
     let mut buffer = Vec::new();
     file_to_compress.read_to_end(&mut buffer)?;
-    zip.write_all(&buffer)?;
 
+    zip.write_all(&buffer)?;
+    zip.flush();
     zip.finish()?;
 
     Ok(())
@@ -77,7 +83,7 @@ fn base_test(
 
 #[test]
 fn str_deflate_test() -> Result<(), std::io::Error> {
-    let compression_method = zip::CompressionMethod::Zstd;
+    let compression_method = zip::CompressionMethod::Deflated;
     let out_file_name = "test_deflate_str.zip";
 
     let file = create_new_clean_file_std(out_file_name);
@@ -90,10 +96,9 @@ fn str_deflate_test() -> Result<(), std::io::Error> {
         .compression_method(compression_method)
         .last_modified_time(DateTime::default());
 
-    zip.start_file("example.txt", options)?;
-    let data = b"Example";
+    zip.start_file("ex.txt", options)?;
+    let data = b"example";
     zip.write_all(data.as_ref())?;
-
     zip.finish()?;
 
     Ok(())

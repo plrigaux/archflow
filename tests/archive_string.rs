@@ -1,10 +1,9 @@
-
 use zipstream::{archive::Archive, compression::Compressor, types::FileDateTime};
 
 mod common;
 use common::create_new_clean_file;
 const TEST_ID: &str = "str";
-const FILE_TO_COMPRESS: &str = "short_text_file.txt";
+const FILE_TO_COMPRESS: &str = "ex.txt";
 
 async fn compress_file(compressor: Compressor, out_file_name: &str) {
     let file = create_new_clean_file(out_file_name).await;

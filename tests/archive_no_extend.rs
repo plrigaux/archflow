@@ -12,7 +12,7 @@ async fn compress_file(compressor: Compressor, out_file_name: &str) {
 
     let mut archive = Archive::new(file);
 
-    let path = Path::new("tests").join(FILE_TO_COMPRESS);
+    let path = Path::new("tests/resources").join(FILE_TO_COMPRESS);
 
     let mut in_file = tokio::fs::File::open(&path).await.unwrap();
 
