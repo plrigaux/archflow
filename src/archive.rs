@@ -20,6 +20,7 @@ pub const VERSION_MADE_BY: u16 = (UNIX as u16) << 8 | DEFAULT_VERSION as u16;
 pub struct Archive<W: tokio::io::AsyncWrite + Unpin> {
     sink: AsyncWriteWrapper<W>,
     files_info: Vec<ArchiveFileEntry>,
+    archive_comment: Option<String>,
 }
 
 impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
@@ -29,6 +30,7 @@ impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
         Self {
             sink: AsyncWriteWrapper::new(sink_),
             files_info: Vec::new(),
+            archive_comment: None,
         }
     }
 
@@ -38,6 +40,10 @@ impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
 
     pub fn get_archive_size(&self) -> usize {
         self.sink.get_written_bytes_count()
+    }
+
+    pub fn get_archive_comment(&mut self, comment: String) {
+        self.archive_comment = Some(comment);
     }
 
     /// Append a new file to the archive using the provided name, date/time and `AsyncRead` object.  
@@ -305,7 +311,7 @@ impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
             total_number_of_entries: self.files_info.len() as u16,
             central_directory_size,
             central_directory_offset,
-            zip_file_comment_length: 0,
+            zip_file_comment_length: self.get_archive_comment_size(),
         };
 
         let mut end_of_central_directory = ArchiveDescriptor::new(END_OF_CENTRAL_DIRECTORY_SIZE);
@@ -316,14 +322,25 @@ impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
         end_of_central_directory.write_u16(dir_end.total_number_of_entries);
         end_of_central_directory.write_u32(dir_end.central_directory_size);
         end_of_central_directory.write_u32(dir_end.central_directory_offset);
-        end_of_central_directory.write_u16(dir_end.zip_file_comment_length);
 
+        end_of_central_directory.write_u16(dir_end.zip_file_comment_length);
+        if dir_end.zip_file_comment_length > 0 {
+            end_of_central_directory.write_str(self.archive_comment.as_ref().unwrap());
+        }
         self.sink
             .write_all(end_of_central_directory.buffer())
             .await?;
 
         //println!("CentralDirectoryEnd {:#?}", dir_end);
         Ok(())
+    }
+
+    fn get_archive_comment_size(&self) -> u16 {
+        if let Some(comment) = self.archive_comment.as_ref() {
+            std::cmp::min(comment.as_bytes().len(), u16::MAX as usize) as u16
+        } else {
+            0
+        }
     }
 }
 

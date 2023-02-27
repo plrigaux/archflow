@@ -75,7 +75,7 @@ fn base_test(
     file_to_compress.read_to_end(&mut buffer)?;
 
     zip.write_all(&buffer)?;
-    zip.flush();
+    zip.flush()?;
     zip.finish()?;
 
     Ok(())

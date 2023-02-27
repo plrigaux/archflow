@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use zipstream::{
     archive::Archive, compression::Compressor, tools::archive_size, types::FileDateTime,
 };
@@ -6,6 +8,7 @@ mod common;
 use common::create_new_clean_file;
 
 const TEST_ID: &str = "1";
+const FILE_TO_COMPRESS: &str = "file1.txt";
 
 #[test]
 fn archive_size_test() {
@@ -114,7 +117,8 @@ async fn compress_file(compressor: Compressor, out_file_name: &str) {
 
     let mut archive = Archive::new(file);
 
-    let mut in_file = tokio::fs::File::open("tests/file1.txt").await.unwrap();
+    let path = Path::new("tests/resources").join(FILE_TO_COMPRESS);
+    let mut in_file = tokio::fs::File::open(path).await.unwrap();
 
     archive
         .append_file("file1.txt", FileDateTime::Zero, compressor, &mut in_file)
