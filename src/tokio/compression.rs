@@ -1,4 +1,3 @@
-use crate::async_write_wrapper::AsyncWriteWrapper;
 use async_compression::tokio::write::BzEncoder;
 use async_compression::tokio::write::DeflateEncoder;
 use async_compression::tokio::write::LzmaEncoder;
@@ -13,6 +12,8 @@ use tokio::io::AsyncRead;
 use tokio::io::AsyncReadExt;
 use tokio::io::AsyncWrite;
 use tokio::io::AsyncWriteExt;
+
+use super::async_write_wrapper::AsyncWriteWrapper;
 
 pub const STORE: u16 = 0;
 pub const DEFALTE: u16 = 8;

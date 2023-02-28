@@ -1,11 +1,12 @@
 use std::path::Path;
 
 use compstream::{
-    archive::{Archive, FileOptions},
-    compression::Compressor,
+    tokio::{
+        archive::{FileOptions, ZipArchive},
+        compression::Compressor,
+    },
     tools::archive_size,
 };
-
 mod common;
 use common::create_new_clean_file;
 
@@ -117,7 +118,7 @@ async fn archive_structure_zup() {
 async fn compress_file(compressor: Compressor, out_file_name: &str) {
     let file = create_new_clean_file(out_file_name).await;
 
-    let mut archive = Archive::new(file);
+    let mut archive = ZipArchive::new(file);
 
     let path = Path::new("tests/resources").join(FILE_TO_COMPRESS);
     let mut in_file = tokio::fs::File::open(path).await.unwrap();

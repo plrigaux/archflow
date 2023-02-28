@@ -1,4 +1,7 @@
-use compstream::{archive::Archive, compression::Compressor, types::FileDateTime};
+use compstream::{
+    tokio::{archive::ZipArchive, compression::Compressor},
+    types::FileDateTime,
+};
 
 mod common;
 use common::create_new_clean_file;
@@ -8,7 +11,7 @@ const FILE_TO_COMPRESS: &str = "ex.txt";
 async fn compress_file(compressor: Compressor, out_file_name: &str) {
     let file = create_new_clean_file(out_file_name).await;
 
-    let mut archive = Archive::new(file);
+    let mut archive = ZipArchive::new(file);
 
     let mut in_file = b"example".as_ref();
 

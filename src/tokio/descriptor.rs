@@ -2,7 +2,7 @@ use std::str;
 use std::u32;
 use std::u8;
 
-use crate::compression::Compressor;
+use super::compression::Compressor;
 use crate::types::ArchiveFileEntry;
 
 pub struct ArchiveDescriptor {
@@ -152,9 +152,10 @@ impl ArchiveDescriptorReader {
 
 #[cfg(test)]
 mod test {
-    use crate::{compression::Compressor, constants::LOCAL_FILE_HEADER_SIGNATURE};
 
-    use super::ArchiveDescriptor;
+    use crate::constants::LOCAL_FILE_HEADER_SIGNATURE;
+
+    use super::*;
 
     #[test]
     fn test_write_file_header() {

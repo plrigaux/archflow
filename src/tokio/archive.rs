@@ -1,29 +1,26 @@
 use crc32fast::Hasher;
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 
-use crate::async_write_wrapper::AsyncWriteWrapper;
-use crate::compression::Compressor;
+use super::async_write_wrapper::AsyncWriteWrapper;
+use super::compression::Compressor;
+use super::descriptor::ArchiveDescriptor;
 use crate::constants::{
     CENTRAL_DIRECTORY_END_SIGNATURE, CENTRAL_DIRECTORY_ENTRY_BASE_SIZE,
     CENTRAL_DIRECTORY_ENTRY_SIGNATURE, DATA_DESCRIPTOR_SIGNATURE, DESCRIPTOR_SIZE,
     END_OF_CENTRAL_DIRECTORY_SIZE, FILE_HEADER_BASE_SIZE, LOCAL_FILE_HEADER_SIGNATURE,
 };
-use crate::descriptor::ArchiveDescriptor;
+
 use crate::types::{ArchiveFileEntry, FileDateTime};
 use std::io::Error as IoError;
 
-pub const DEFAULT_VERSION: u8 = 46;
-pub const UNIX: u8 = 3;
-pub const VERSION_MADE_BY: u16 = (UNIX as u16) << 8 | DEFAULT_VERSION as u16;
-
 #[derive(Debug)]
-pub struct Archive<W: tokio::io::AsyncWrite + Unpin> {
+pub struct ZipArchive<W: tokio::io::AsyncWrite + Unpin> {
     sink: AsyncWriteWrapper<W>,
     files_info: Vec<ArchiveFileEntry>,
     archive_comment: Option<String>,
 }
 
-impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
+impl<W: tokio::io::AsyncWrite + Unpin> ZipArchive<W> {
     /// Create a new zip archive, using the underlying `AsyncWrite` to write files' header and payload.
     pub fn new(sink_: W) -> Self {
         //let buf = BufWriter::new(sink_);

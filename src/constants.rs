@@ -9,3 +9,7 @@ pub const CENTRAL_DIRECTORY_END_SIGNATURE: u32 = 0x06054b50;
 pub const CENTRAL_DIRECTORY_ENTRY_SIGNATURE: u32 = 0x02014b50;
 pub const LOCAL_FILE_HEADER_SIGNATURE: u32 = 0x04034b50; // Local file header signature.
 pub const DATA_DESCRIPTOR_SIGNATURE: u32 = 0x08074b50; // Data descriptor signature.
+
+pub const DEFAULT_VERSION: u8 = 46;
+pub const UNIX: u8 = 3;
+pub const VERSION_MADE_BY: u16 = (UNIX as u16) << 8 | DEFAULT_VERSION as u16;

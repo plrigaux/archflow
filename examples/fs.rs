@@ -1,6 +1,8 @@
 use compstream::{
-    archive::{Archive, FileOptions},
-    compression::Compressor,
+    tokio::{
+        archive::{FileOptions, ZipArchive},
+        compression::Compressor,
+    },
     types::FileDateTime,
 };
 use std::io::Cursor;
@@ -13,7 +15,7 @@ async fn main() {
     let options = FileOptions::default()
         .compression_method(Compressor::Store())
         .last_modified_time(FileDateTime::Now);
-    let mut archive = Archive::new(file);
+    let mut archive = ZipArchive::new(file);
     archive
         .append_file("file1.txt", &mut Cursor::new(b"hello\n"), &options)
         .await

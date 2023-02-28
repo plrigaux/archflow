@@ -1,7 +1,7 @@
 use core::fmt;
 use std::u16;
 
-use crate::{archive::VERSION_MADE_BY, compression::Compressor};
+use crate::{constants::VERSION_MADE_BY, tokio::compression::Compressor};
 use chrono::{DateTime, Datelike, Local, NaiveDate, TimeZone, Timelike};
 
 #[derive(Debug)]
