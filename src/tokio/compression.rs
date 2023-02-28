@@ -113,6 +113,7 @@ impl Compressor {
         writer: &'a mut AsyncWriteWrapper<W>,
         reader: &'a mut R,
         hasher: &'a mut Hasher,
+        compression_level: Level,
     ) -> Result<usize, IoError>
     where
         R: AsyncRead + Unpin,
@@ -137,67 +138,36 @@ impl Compressor {
                 Ok(total_read)
             }
             Compressor::Deflate() => {
-                let mut zencoder = DeflateEncoder::new(writer);
+                let mut zencoder = DeflateEncoder::with_quality(writer, compression_level.value());
 
                 let total_read = compress_tokio!(zencoder, hasher, reader);
 
                 Ok(total_read)
             }
 
-            /*             Compressor::DeflateFate2() => {
-                           //TODO chage vec to stream
-                           let mut encoder = DeflateEncoderFlate2::new(Vec::new(), Compression::default());
-
-                           let mut buf = vec![0; 4096];
-                           let mut total_read = 0;
-
-                           loop {
-                               let read = reader.read(&mut buf).await?;
-                               if read == 0 {
-                                   break;
-                               }
-
-                               total_read += read;
-                               hasher.update(&buf[..read]);
-                               encoder.write_all(&buf[..read])?;
-                               //self.sink.write_all(&buf[..read]).await?; // Payload chunk.
-                           }
-
-                           encoder.flush()?;
-
-                           let compressed_stream = encoder.finish()?;
-
-                           writer.write_all(&compressed_stream).await?;
-                           writer.flush().await?;
-
-                           //writer.write(&compressed_stream).await?;
-
-                           Ok(total_read)
-                       }
-            */
             Compressor::BZip2() => {
-                let mut zencoder = BzEncoder::new(writer);
+                let mut zencoder = BzEncoder::with_quality(writer, compression_level.value());
 
                 let total_read = compress_tokio!(zencoder, hasher, reader);
 
                 Ok(total_read)
             }
             Compressor::Lzma() => {
-                let mut zencoder = LzmaEncoder::new(writer);
+                let mut zencoder = LzmaEncoder::with_quality(writer, compression_level.value());
 
                 let total_read = compress_tokio!(zencoder, hasher, reader);
 
                 Ok(total_read)
             }
             Compressor::Zstd() => {
-                let mut zencoder = ZstdEncoder::new(writer);
+                let mut zencoder = ZstdEncoder::with_quality(writer, compression_level.value());
 
                 let total_read = compress_tokio!(zencoder, hasher, reader);
 
                 Ok(total_read)
             }
             Compressor::Xz() => {
-                let mut zencoder = XzEncoder::new(writer);
+                let mut zencoder = XzEncoder::with_quality(writer, compression_level.value());
 
                 let total_read = compress_tokio!(zencoder, hasher, reader);
 
@@ -217,6 +187,25 @@ impl Compressor {
 impl Display for Compressor {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.compression_method_label())
+    }
+}
+
+#[derive(Clone, Copy)]
+pub enum Level {
+    Fastest,
+    Best,
+    Default,
+    Precise(u32),
+}
+
+impl Level {
+    fn value(&self) -> async_compression::Level {
+        match self {
+            Level::Fastest => async_compression::Level::Fastest,
+            Level::Best => async_compression::Level::Best,
+            Level::Default => async_compression::Level::Default,
+            Level::Precise(val) => async_compression::Level::Precise(*val),
+        }
     }
 }
 
@@ -285,7 +274,7 @@ mod test {
         //let a: AsyncRead = &x;
         let mut writer = AsyncWriteWrapper::new(Vec::new());
         compressor
-            .compress(&mut writer, &mut x.as_ref(), &mut hasher)
+            .compress(&mut writer, &mut x.as_ref(), &mut hasher, Level::Default)
             .await
             .unwrap();
 

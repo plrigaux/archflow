@@ -2,7 +2,7 @@ use crc32fast::Hasher;
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 
 use super::async_write_wrapper::AsyncWriteWrapper;
-use super::compression::Compressor;
+use super::compression::{Compressor, Level};
 use super::descriptor::ArchiveDescriptor;
 use crate::constants::{
     CENTRAL_DIRECTORY_END_SIGNATURE, CENTRAL_DIRECTORY_ENTRY_BASE_SIZE,
@@ -138,7 +138,12 @@ impl<W: tokio::io::AsyncWrite + Unpin> ZipArchive<W> {
         let cur_size = self.sink.get_written_bytes_count();
 
         let uncompressed_size = compressor
-            .compress(&mut self.sink, reader, &mut hasher)
+            .compress(
+                &mut self.sink,
+                reader,
+                &mut hasher,
+                options.compression_level,
+            )
             .await?;
 
         //self.sink.flush().await?;
@@ -203,7 +208,7 @@ impl<W: tokio::io::AsyncWrite + Unpin> ZipArchive<W> {
         let mut async_writer = AsyncWriteWrapper::new(buffer);
 
         let uncompressed_size = compressor
-            .compress(&mut async_writer, reader, &mut hasher)
+            .compress(&mut async_writer, reader, &mut hasher, Level::Default)
             .await? as u32;
 
         async_writer.flush().await?;
@@ -354,7 +359,7 @@ pub struct CentralDirectoryEnd {
 #[derive(Clone)]
 pub struct FileOptions {
     compressor: Compressor,
-    compression_level: Option<i32>,
+    compression_level: Level,
     last_modified_time: FileDateTime,
     permissions: Option<u32>,
 }
@@ -378,7 +383,7 @@ impl FileOptions {
     /// * `Bzip2`: 0 - 9. Default is 6
     /// * `Zstd`: -7 - 22, with zero being mapped to default level. Default is 3
     /// * others: only `None` is allowed
-    pub fn compression_level(mut self, level: Option<i32>) -> FileOptions {
+    pub fn compression_level(mut self, level: Level) -> FileOptions {
         self.compression_level = level;
         self
     }
@@ -412,7 +417,7 @@ impl Default for FileOptions {
     fn default() -> Self {
         Self {
             compressor: Compressor::Deflate(),
-            compression_level: None,
+            compression_level: Level::Default,
             last_modified_time: FileDateTime::default(),
             permissions: None,
         }
