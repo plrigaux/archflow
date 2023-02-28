@@ -24,7 +24,7 @@ pub const LZMA: u16 = 14;
 pub const ZSTD: u16 = 93;
 pub const XZ: u16 = 95;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Compressor {
     Store(),
     Deflate(),
@@ -76,6 +76,8 @@ impl Compressor {
     pub fn version_needed(&self) -> u16 {
         // higher versions matched first
         match self {
+            Compressor::Lzma() => 63,
+            Compressor::Zstd() => 63,
             Compressor::BZip2() => 46,
             _ => 20,
         }

@@ -271,6 +271,13 @@ impl fmt::Display for FileDateTime {
     }
 }
 
+impl Default for FileDateTime {
+    /// Construct a new FileOptions object
+    fn default() -> Self {
+        FileDateTime::Zero
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::FileDateTime;

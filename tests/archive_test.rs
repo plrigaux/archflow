@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use zipstream::{
+use compstream::{
     archive::Archive, compression::Compressor, tools::archive_size, types::FileDateTime,
 };
 

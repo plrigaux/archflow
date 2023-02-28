@@ -1,6 +1,6 @@
+use compstream::{archive::Archive, compression::Compressor, types::FileDateTime};
 use std::io::Cursor;
 use tokio::fs::File;
-use zipstream::{archive::Archive, compression::Compressor, types::FileDateTime};
 
 #[tokio::main]
 async fn main() {

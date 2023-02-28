@@ -1,11 +1,10 @@
+use compstream::tools::archive_size;
+use compstream::{archive::Archive, compression::Compressor, types::FileDateTime};
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{header, Body, Request, Response, Server, StatusCode};
 use std::io::Cursor;
 use tokio::io::duplex;
 use tokio_util::io::ReaderStream;
-use zipstream::archive::Archive;
-use zipstream::tools::archive_size;
-use zipstream::types::FileDateTime;
 
 async fn zip_archive(_req: Request<Body>) -> Result<Response<Body>, hyper::http::Error> {
     let (filename_1, mut fd_1) = (String::from("file1.txt"), Cursor::new(b"hello\n".to_vec()));
@@ -22,7 +21,7 @@ async fn zip_archive(_req: Request<Body>) -> Result<Response<Body>, hyper::http:
             .append_file(
                 &filename_1,
                 FileDateTime::now(),
-                zipstream::compression::Compressor::Store(),
+                Compressor::Store(),
                 &mut fd_1,
             )
             .await
@@ -31,7 +30,7 @@ async fn zip_archive(_req: Request<Body>) -> Result<Response<Body>, hyper::http:
             .append_file(
                 &filename_2,
                 FileDateTime::now(),
-                zipstream::compression::Compressor::Store(),
+                Compressor::Store(),
                 &mut fd_2,
             )
             .await

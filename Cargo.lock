@@ -193,6 +193,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "compstream"
+version = "0.4.0"
+dependencies = [
+ "async-compression",
+ "chrono",
+ "crc32fast",
+ "flate2",
+ "hyper",
+ "tokio",
+ "tokio-util",
+ "zip",
+]
+
+[[package]]
 name = "constant_time_eq"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1062,20 +1076,6 @@ dependencies = [
  "sha1",
  "time 0.3.19",
  "zstd",
-]
-
-[[package]]
-name = "zipstream"
-version = "0.4.0"
-dependencies = [
- "async-compression",
- "chrono",
- "crc32fast",
- "flate2",
- "hyper",
- "tokio",
- "tokio-util",
- "zip",
 ]
 
 [[package]]

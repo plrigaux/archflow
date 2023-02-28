@@ -29,4 +29,3 @@ pub async fn create_new_clean_file(file_name: &str) -> File {
 
     file
 }
-

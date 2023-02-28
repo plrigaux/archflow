@@ -1,4 +1,4 @@
-use zipstream::{archive::Archive, compression::Compressor, types::FileDateTime};
+use compstream::{archive::Archive, compression::Compressor, types::FileDateTime};
 
 mod common;
 use common::create_new_clean_file;
