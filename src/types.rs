@@ -112,7 +112,7 @@ impl fmt::Display for ArchiveFileEntry {
             "extended local header:", extended_local_header
         )?;
 
-        let date_time = FileDateTime::from_msdos(self.last_mod_file_date, self.last_mod_file_date);
+        let date_time = DateTimeCS::from_msdos(self.last_mod_file_date, self.last_mod_file_date);
         writeln!(
             f,
             "{: <padding$}{}",
@@ -146,57 +146,33 @@ impl fmt::Display for ArchiveFileEntry {
     }
 }
 
-/// The (timezone-less) date and time that will be written in the archive alongside the file.
-///
-/// Use `FileDateTime::Zero` if the date and time are insignificant. This will set the value to 0 which is 1980, January 1th, 12AM.  
-/// Use `FileDateTime::Custom` if you need to set a custom date and time.  
-/// Use `FileDateTime::now()` if you want to use the current date and time (`chrono-datetime` feature required).
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
-pub enum FileDateTime {
-    /// 1980, January 1th, 12AM.
-    Zero,
-    /// (year, month, day, hour, minute, second)
-    Custom {
-        year: u16,
-        month: u16,
-        day: u16,
-        hour: u16,
-        minute: u16,
-        second: u16,
-    },
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub struct DateTimeCS {
+    year: u16,
+    month: u16,
+    day: u16,
+    hour: u16,
+    minute: u16,
+    second: u16,
 }
 
-impl FileDateTime {
-    fn tuple(&self) -> (u16, u16, u16, u16, u16, u16) {
-        match self {
-            FileDateTime::Zero => (1980, 1, 1, 0, 1, 30),
-            &FileDateTime::Custom {
-                year,
-                month,
-                day,
-                hour,
-                minute,
-                second,
-            } => (year, month, day, hour, minute, second),
+impl Default for DateTimeCS {
+    /// Construct a new FileOptions object
+    fn default() -> Self {
+        Self {
+            year: 1980,
+            month: 1,
+            day: 1,
+            hour: 0,
+            minute: 1,
+            second: 30,
         }
     }
+}
 
-    pub fn ms_dos(&self) -> (u16, u16) {
-        let (year, month, day, hour, min, sec) = self.tuple();
-        (
-            day | month << 5 | year.saturating_sub(1980) << 9,
-            (sec >> 1) | min << 5 | hour << 11,
-        )
-    }
-
-    /// Use the local date and time of the system.
-    pub fn now() -> Self {
-        Self::from_chrono_datetime(Local::now())
-    }
-
-    /// Use a custom date and time.
+impl DateTimeCS {
     pub fn from_chrono_datetime<Tz: TimeZone>(datetime: DateTime<Tz>) -> Self {
-        Self::Custom {
+        Self {
             year: datetime.year() as u16,
             month: datetime.month() as u16,
             day: datetime.day() as u16,
@@ -204,6 +180,10 @@ impl FileDateTime {
             minute: datetime.minute() as u16,
             second: datetime.second() as u16,
         }
+    }
+
+    pub fn now() -> Self {
+        Self::from_chrono_datetime(Local::now())
     }
 
     pub fn from_msdos(datepart: u16, timepart: u16) -> Self {
@@ -214,7 +194,7 @@ impl FileDateTime {
         let months = (datepart & 0b0000000111100000) >> 5;
         let years = (datepart & 0b1111111000000000) >> 9;
 
-        Self::Custom {
+        Self {
             year: years + 1980,
             month: months,
             day: days,
@@ -225,28 +205,14 @@ impl FileDateTime {
     }
 
     pub fn to_time(&self) -> chrono::NaiveDateTime {
-        //println!("to_time {:?}", self);
-        match self {
-            FileDateTime::Custom {
-                year,
-                month,
-                day,
-                hour,
-                minute,
-                second,
-            } => FileDateTime::to_time_dry(
-                *year as i32,
-                *month as u32,
-                *day as u32,
-                *hour as u32,
-                *minute as u32,
-                *second as u32,
-            ),
-            _ => {
-                let dt = FileDateTime::from_msdos(0u16, 0u16);
-                dt.to_time()
-            }
-        }
+        Self::to_time_dry(
+            self.year as i32,
+            self.month as u32,
+            self.day as u32,
+            self.hour as u32,
+            self.minute as u32,
+            self.second as u32,
+        )
     }
 
     fn to_time_dry(
@@ -257,17 +223,57 @@ impl FileDateTime {
         minute: u32,
         second: u32,
     ) -> chrono::NaiveDateTime {
-        let date = NaiveDate::from_ymd_opt(year, month, day)
-            .unwrap_or_else(|| NaiveDate::from_ymd_opt(1980, 1, 1).unwrap());
+        let date = NaiveDate::from_ymd_opt(year, month, day).unwrap_or_else(|| {
+            let zero = DateTimeCS::default();
+            NaiveDate::from_ymd_opt(zero.year as i32, zero.month as u32, zero.day as u32).unwrap()
+        });
 
         date.and_hms_opt(hour, minute, second).unwrap_or_default()
     }
+
+    pub fn ms_dos(&self) -> (u16, u16) {
+        let date = self.day | (self.month << 5) | self.year.saturating_sub(1980) << 9;
+        let time = (self.second / 2) | (self.minute << 5) | self.hour << 11;
+        (date, time)
+    }
 }
 
-impl fmt::Display for FileDateTime {
+impl fmt::Display for DateTimeCS {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let date_time = self.to_time();
         write!(f, "{:}", date_time)
+    }
+}
+
+/// The (timezone-less) date and time that will be written in the archive alongside the file.
+///
+/// Use `FileDateTime::Zero` if the date and time are insignificant. This will set the value to 0 which is 1980, January 1th, 12AM.  
+/// Use `FileDateTime::Custom` if you need to set a custom date and time.  
+/// Use `FileDateTime::now()` if you want to use the current date and time (`chrono-datetime` feature required).
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub enum FileDateTime {
+    /// 1980, January 1th, 12AM.
+    Zero,
+    /// (year, month, day, hour, minute, second)
+    Custom(DateTimeCS),
+    Now,
+}
+
+impl FileDateTime {
+    fn tuple(&self) -> DateTimeCS {
+        match self {
+            FileDateTime::Zero => DateTimeCS::default(),
+            FileDateTime::Custom(date_time) => *date_time,
+            FileDateTime::Now => DateTimeCS::now(),
+        }
+    }
+
+    pub fn ms_dos(&self) -> (u16, u16) {
+        self.tuple().ms_dos()
+    }
+
+    pub fn to_time(&self) -> chrono::NaiveDateTime {
+        self.tuple().to_time()
     }
 }
 
@@ -280,7 +286,7 @@ impl Default for FileDateTime {
 
 #[cfg(test)]
 mod test {
-    use super::FileDateTime;
+    use super::*;
 
     #[test]
     fn test_time_display() {
@@ -293,7 +299,7 @@ mod test {
 
     #[test]
     fn test_time_display_0_0() {
-        let date_time = FileDateTime::from_msdos(0, 0);
+        let date_time = DateTimeCS::from_msdos(0, 0);
 
         println!("Time zero {}", date_time)
     }

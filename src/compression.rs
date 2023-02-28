@@ -6,12 +6,9 @@ use async_compression::tokio::write::XzEncoder;
 
 use async_compression::tokio::write::ZstdEncoder;
 use crc32fast::Hasher;
-use flate2::write::DeflateEncoder as DeflateEncoderFlate2;
 
-use flate2::Compression;
 use std::fmt::Display;
 use std::io::Error as IoError;
-use std::io::Write;
 use tokio::io::AsyncRead;
 use tokio::io::AsyncReadExt;
 use tokio::io::AsyncWrite;
@@ -24,11 +21,11 @@ pub const LZMA: u16 = 14;
 pub const ZSTD: u16 = 93;
 pub const XZ: u16 = 95;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum Compressor {
     Store(),
     Deflate(),
-    DeflateFate2(),
+    //DeflateFate2(),
     BZip2(),
     Lzma(),
     Zstd(),
@@ -64,7 +61,7 @@ impl Compressor {
         match self {
             Compressor::Store() => STORE,
             Compressor::Deflate() => DEFALTE,
-            Compressor::DeflateFate2() => DEFALTE,
+            //   Compressor::DeflateFate2() => DEFALTE,
             Compressor::BZip2() => BZIP2,
             Compressor::Lzma() => LZMA,
             Compressor::Zstd() => ZSTD,
@@ -101,7 +98,7 @@ impl Compressor {
         match self {
             Compressor::Store() => "store",
             Compressor::Deflate() => "deflate",
-            Compressor::DeflateFate2() => "deflate",
+            //Compressor::DeflateFate2() => "deflate",
             Compressor::BZip2() => "bzip2",
             Compressor::Lzma() => "lzma",
             Compressor::Zstd() => "zstd",
@@ -146,37 +143,37 @@ impl Compressor {
                 Ok(total_read)
             }
 
-            Compressor::DeflateFate2() => {
-                //TODO chage vec to stream
-                let mut encoder = DeflateEncoderFlate2::new(Vec::new(), Compression::default());
+            /*             Compressor::DeflateFate2() => {
+                           //TODO chage vec to stream
+                           let mut encoder = DeflateEncoderFlate2::new(Vec::new(), Compression::default());
 
-                let mut buf = vec![0; 4096];
-                let mut total_read = 0;
+                           let mut buf = vec![0; 4096];
+                           let mut total_read = 0;
 
-                loop {
-                    let read = reader.read(&mut buf).await?;
-                    if read == 0 {
-                        break;
-                    }
+                           loop {
+                               let read = reader.read(&mut buf).await?;
+                               if read == 0 {
+                                   break;
+                               }
 
-                    total_read += read;
-                    hasher.update(&buf[..read]);
-                    encoder.write_all(&buf[..read])?;
-                    //self.sink.write_all(&buf[..read]).await?; // Payload chunk.
-                }
+                               total_read += read;
+                               hasher.update(&buf[..read]);
+                               encoder.write_all(&buf[..read])?;
+                               //self.sink.write_all(&buf[..read]).await?; // Payload chunk.
+                           }
 
-                encoder.flush()?;
+                           encoder.flush()?;
 
-                let compressed_stream = encoder.finish()?;
+                           let compressed_stream = encoder.finish()?;
 
-                writer.write_all(&compressed_stream).await?;
-                writer.flush().await?;
+                           writer.write_all(&compressed_stream).await?;
+                           writer.flush().await?;
 
-                //writer.write(&compressed_stream).await?;
+                           //writer.write(&compressed_stream).await?;
 
-                Ok(total_read)
-            }
-
+                           Ok(total_read)
+                       }
+            */
             Compressor::BZip2() => {
                 let mut zencoder = BzEncoder::new(writer);
 
@@ -226,8 +223,9 @@ impl Display for Compressor {
 mod test {
     use super::*;
     use async_compression::tokio::write::ZlibEncoder;
+    use flate2::write::DeflateEncoder as DeflateEncoderFlate2;
     use flate2::write::ZlibEncoder as ZlibEncoderFlate;
-
+    use std::io::Write;
     #[tokio::test]
     async fn test_defate_basic() {
         let x = b"example";
@@ -293,23 +291,6 @@ mod test {
         let temp = writer.retrieve_writer();
         println!("compress len {:?}", temp.len());
         println!("{:X?}", temp);
-
-        let compressor = Compressor::DeflateFate2();
-        let mut hasher = Hasher::new();
-
-        //let a: AsyncRead = &x;
-        let mut writer = AsyncWriteWrapper::new(Vec::new());
-        compressor
-            .compress(&mut writer, &mut x.as_ref(), &mut hasher)
-            .await
-            .unwrap();
-
-        let temp = writer.retrieve_writer();
-        println!("compress len {:?}", temp.len());
-        println!("{:X?}", temp);
-
-        //   import zlib; print(zlib.decompress(bytes([120, 1, 0, 7, 0, 248, 255, 101, 120, 97, 109, 112, 108, 101, 0, 0, 0, 255, 255, 3, 0, 11, 192, 2, 237])))
-        //prints b'example`
     }
 }
 

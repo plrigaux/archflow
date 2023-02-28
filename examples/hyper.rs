@@ -1,3 +1,4 @@
+use compstream::archive::FileOptions;
 use compstream::tools::archive_size;
 use compstream::{archive::Archive, compression::Compressor, types::FileDateTime};
 use hyper::service::{make_service_fn, service_fn};
@@ -15,24 +16,17 @@ async fn zip_archive(_req: Request<Body>) -> Result<Response<Body>, hyper::http:
     ]);
 
     let (w, r) = duplex(4096);
+    let options = FileOptions::default()
+        .compression_method(Compressor::Store())
+        .last_modified_time(FileDateTime::Now);
     tokio::spawn(async move {
         let mut archive = Archive::new(w);
         archive
-            .append_file(
-                &filename_1,
-                FileDateTime::now(),
-                Compressor::Store(),
-                &mut fd_1,
-            )
+            .append_file(&filename_1, &mut fd_1, &options)
             .await
             .unwrap();
         archive
-            .append_file(
-                &filename_2,
-                FileDateTime::now(),
-                Compressor::Store(),
-                &mut fd_2,
-            )
+            .append_file(&filename_2, &mut fd_2, &options)
             .await
             .unwrap();
         archive.finalize().await.unwrap();

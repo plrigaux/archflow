@@ -61,16 +61,14 @@ impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
     pub async fn append_file<R>(
         &mut self,
         file_name: &str,
-        datetime: FileDateTime,
-        compressor: Compressor,
         reader: &mut R,
+        options: &FileOptions,
     ) -> Result<(), IoError>
     where
         W: AsyncWrite + Unpin,
         R: AsyncRead + Unpin,
     {
-        self.append_base(file_name, datetime, reader, compressor)
-            .await?;
+        self.append_base(file_name, reader, options).await?;
 
         Ok(())
     }
@@ -95,15 +93,15 @@ impl<W: tokio::io::AsyncWrite + Unpin> Archive<W> {
     async fn append_base<R>(
         &mut self,
         file_name: &str,
-        datetime: FileDateTime,
         reader: &mut R,
-        compressor: Compressor,
+        options: &FileOptions,
     ) -> Result<(), IoError>
     where
         W: AsyncWrite + Unpin,
         R: AsyncRead + Unpin,
     {
-        let (date, time) = datetime.ms_dos();
+        let compressor = options.compressor;
+        let (date, time) = options.last_modified_time.ms_dos();
         let offset = self.sink.get_written_bytes_count() as u32;
 
         let compression_method = compressor.compression_method();
@@ -358,7 +356,7 @@ pub struct CentralDirectoryEnd {
 /// Metadata for a file to be written
 #[derive(Clone)]
 pub struct FileOptions {
-    compression_method: Compressor,
+    compressor: Compressor,
     compression_level: Option<i32>,
     last_modified_time: FileDateTime,
     permissions: Option<u32>,
@@ -370,7 +368,7 @@ impl FileOptions {
     /// The default is `CompressionMethod::Deflated`. If the deflate compression feature is
     /// disabled, `CompressionMethod::Stored` becomes the default.
     pub fn compression_method(mut self, method: Compressor) -> FileOptions {
-        self.compression_method = method;
+        self.compressor = method;
         self
     }
 
@@ -416,7 +414,7 @@ impl Default for FileOptions {
     /// Construct a new FileOptions object
     fn default() -> Self {
         Self {
-            compression_method: Compressor::Deflate(),
+            compressor: Compressor::Deflate(),
             compression_level: None,
             last_modified_time: FileDateTime::default(),
             permissions: None,

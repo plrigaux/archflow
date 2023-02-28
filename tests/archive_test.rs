@@ -1,7 +1,9 @@
 use std::path::Path;
 
 use compstream::{
-    archive::Archive, compression::Compressor, tools::archive_size, types::FileDateTime,
+    archive::{Archive, FileOptions},
+    compression::Compressor,
+    tools::archive_size,
 };
 
 mod common;
@@ -120,8 +122,9 @@ async fn compress_file(compressor: Compressor, out_file_name: &str) {
     let path = Path::new("tests/resources").join(FILE_TO_COMPRESS);
     let mut in_file = tokio::fs::File::open(path).await.unwrap();
 
+    let options = FileOptions::default().compression_method(compressor);
     archive
-        .append_file("file1.txt", FileDateTime::Zero, compressor, &mut in_file)
+        .append_file("file1.txt", &mut in_file, &options)
         .await
         .unwrap();
 
@@ -146,14 +149,14 @@ async fn archive_structure_zlib_deflate_tokio() {
     compress_file(compressor, &out_file_name).await;
 }
 
-#[tokio::test]
+/* #[tokio::test]
 async fn archive_structure_zlib_deflate_flate2() {
     let compressor = Compressor::DeflateFate2();
     let out_file_name = ["test_", &compressor.to_string(), TEST_ID, "_flate", ".zip"].join("");
 
     compress_file(compressor, &out_file_name).await;
 }
-
+ */
 #[tokio::test]
 async fn archive_structure_compress_bzip() {
     let compressor = Compressor::BZip2();

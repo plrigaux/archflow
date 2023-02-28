@@ -54,7 +54,7 @@ async fn archive_structure_zlib_deflate_tokio() {
     compress_file(compressor, &out_file_name).await;
 }
 
-#[tokio::test]
+/* #[tokio::test]
 async fn archive_structure_zlib_deflate_flate2() {
     let compressor = Compressor::DeflateFate2();
     let out_file_name = [
@@ -68,7 +68,7 @@ async fn archive_structure_zlib_deflate_flate2() {
     .join("");
 
     compress_file(compressor, &out_file_name).await;
-}
+} */
 
 #[tokio::test]
 async fn archive_structure_compress_bzip() {
