@@ -32,6 +32,10 @@ impl ArchiveDescriptor {
         self.buffer.extend_from_slice(val);
     }
 
+    pub fn write_bytes_len(&mut self, val: &[u8], max_len: usize) {
+        self.buffer.extend(val.iter().take(max_len));
+    }
+
     pub fn finish(self) -> Vec<u8> {
         self.buffer
     }

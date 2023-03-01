@@ -10,6 +10,11 @@ pub struct AsyncWriteWrapper<W: AsyncWrite + Unpin> {
     written_bytes_count: usize,
 }
 
+pub trait BytesCounter {
+    fn get_written_bytes_count(&self) -> usize;
+    fn set_written_bytes_count(&mut self, count: usize);
+}
+
 impl<W: AsyncWrite + Unpin> AsyncWriteWrapper<W> {
     pub fn new(w: W) -> AsyncWriteWrapper<W> {
         Self {
@@ -18,12 +23,18 @@ impl<W: AsyncWrite + Unpin> AsyncWriteWrapper<W> {
         }
     }
 
-    pub fn get_written_bytes_count(&self) -> usize {
+    pub fn retrieve_writer(self) -> W {
+        self.writer
+    }
+}
+
+impl<W: AsyncWrite + Unpin> BytesCounter for AsyncWriteWrapper<W> {
+    fn get_written_bytes_count(&self) -> usize {
         self.written_bytes_count
     }
 
-    pub fn retrieve_writer(self) -> W {
-        self.writer
+    fn set_written_bytes_count(&mut self, count: usize) {
+        self.written_bytes_count = count;
     }
 }
 
@@ -141,5 +152,15 @@ impl<W: AsyncWrite + AsyncSeek + Unpin> AsyncSeek for AsyncWriteSeekWrapper<W> {
 
     fn poll_complete(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<u64>> {
         Pin::new(&mut self.get_mut().writer_seek).poll_complete(cx)
+    }
+}
+
+impl<W: AsyncWrite + AsyncSeek + Unpin> BytesCounter for AsyncWriteSeekWrapper<W> {
+    fn get_written_bytes_count(&self) -> usize {
+        self.written_bytes_count
+    }
+
+    fn set_written_bytes_count(&mut self, count: usize) {
+        self.written_bytes_count = count;
     }
 }

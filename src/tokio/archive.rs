@@ -1,7 +1,7 @@
 use crc32fast::Hasher;
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 
-use super::async_wrapper::AsyncWriteWrapper;
+use super::async_wrapper::{AsyncWriteWrapper, BytesCounter};
 use super::compression::{Compressor, Level};
 use super::descriptor::ArchiveDescriptor;
 use crate::constants::{
@@ -17,7 +17,7 @@ use std::io::Error as IoError;
 pub struct ZipArchive<W: tokio::io::AsyncWrite + Unpin> {
     sink: AsyncWriteWrapper<W>,
     files_info: Vec<ArchiveFileEntry>,
-    archive_comment: Option<String>,
+    archive_comment: Vec<u8>,
 }
 
 impl<W: tokio::io::AsyncWrite + Unpin> ZipArchive<W> {
@@ -27,7 +27,7 @@ impl<W: tokio::io::AsyncWrite + Unpin> ZipArchive<W> {
         Self {
             sink: AsyncWriteWrapper::new(sink_),
             files_info: Vec::new(),
-            archive_comment: None,
+            archive_comment: Vec::new(),
         }
     }
 
@@ -36,11 +36,11 @@ impl<W: tokio::io::AsyncWrite + Unpin> ZipArchive<W> {
     }
 
     pub fn get_archive_size(&self) -> usize {
-        self.sink.get_written_bytes_count()
+        (&self.sink as &dyn BytesCounter).get_written_bytes_count()
     }
 
-    pub fn get_archive_comment(&mut self, comment: String) {
-        self.archive_comment = Some(comment);
+    pub fn set_archive_comment(&mut self, comment: &str) {
+        self.archive_comment = comment.as_bytes().to_owned();
     }
 
     /// Append a new file to the archive using the provided name, date/time and `AsyncRead` object.  
@@ -322,11 +322,15 @@ impl<W: tokio::io::AsyncWrite + Unpin> ZipArchive<W> {
         end_of_central_directory.write_u16(dir_end.total_number_of_entries);
         end_of_central_directory.write_u32(dir_end.central_directory_size);
         end_of_central_directory.write_u32(dir_end.central_directory_offset);
-
         end_of_central_directory.write_u16(dir_end.zip_file_comment_length);
+
         if dir_end.zip_file_comment_length > 0 {
-            end_of_central_directory.write_str(self.archive_comment.as_ref().unwrap());
+            end_of_central_directory.write_bytes_len(
+                &self.archive_comment,
+                dir_end.zip_file_comment_length as usize,
+            );
         }
+
         self.sink
             .write_all(end_of_central_directory.buffer())
             .await?;
@@ -336,11 +340,7 @@ impl<W: tokio::io::AsyncWrite + Unpin> ZipArchive<W> {
     }
 
     fn get_archive_comment_size(&self) -> u16 {
-        if let Some(comment) = self.archive_comment.as_ref() {
-            std::cmp::min(comment.as_bytes().len(), u16::MAX as usize) as u16
-        } else {
-            0
-        }
+        u16::try_from(self.archive_comment.len()).map_or(u16::MAX, |val| val)
     }
 }
 
