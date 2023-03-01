@@ -2,7 +2,7 @@ use core::fmt;
 use std::u16;
 
 use crate::{constants::VERSION_MADE_BY, tokio::compression::Compressor};
-use chrono::{DateTime, Datelike, Local, NaiveDate, TimeZone, Timelike};
+use chrono::{DateTime, Datelike, Local, NaiveDate, TimeZone, Timelike, Utc};
 
 #[derive(Debug)]
 pub struct ArchiveFileEntry {
@@ -164,8 +164,8 @@ impl Default for DateTimeCS {
             month: 1,
             day: 1,
             hour: 0,
-            minute: 1,
-            second: 30,
+            minute: 0,
+            second: 0,
         }
     }
 }
@@ -236,6 +236,21 @@ impl DateTimeCS {
         let time = (self.second / 2) | (self.minute << 5) | self.hour << 11;
         (date, time)
     }
+
+    pub fn timestamp(&self) -> i32 {
+        let local = &self.to_time();
+
+        match local.and_local_timezone(Utc) {
+            chrono::LocalResult::None => todo!(),
+            chrono::LocalResult::Single(single) => Self::convert_timestamp(single),
+            chrono::LocalResult::Ambiguous(first, _) => Self::convert_timestamp(first),
+        }
+    }
+
+    fn convert_timestamp(timezone_aware_datetime: DateTime<Utc>) -> i32 {
+        let timestamp = timezone_aware_datetime.timestamp();
+        i32::try_from(timestamp).map_or(i32::MAX, |val| val)
+    }
 }
 
 impl fmt::Display for DateTimeCS {
@@ -275,6 +290,14 @@ impl FileDateTime {
     pub fn to_time(&self) -> chrono::NaiveDateTime {
         self.tuple().to_time()
     }
+
+    pub fn timestamp(&self) -> i32 {
+        match self {
+            FileDateTime::Zero => DateTimeCS::default().timestamp(),
+            FileDateTime::Custom(date_time) => date_time.timestamp(),
+            FileDateTime::Now => DateTimeCS::convert_timestamp(chrono::offset::Utc::now()),
+        }
+    }
 }
 
 impl Default for FileDateTime {
@@ -298,9 +321,31 @@ mod test {
     }
 
     #[test]
+    fn test_time_display_zero_msdos() {
+        let time: FileDateTime = FileDateTime::Zero;
+        //  time.to_time
+
+        let (date, time) = time.ms_dos();
+
+        println!("Time zero {} {}", date, time)
+    }
+
+    #[test]
     fn test_time_display_0_0() {
         let date_time = DateTimeCS::from_msdos(0, 0);
 
         println!("Time zero {}", date_time)
+    }
+
+    #[test]
+    fn test_time_display_time() {
+        let time: FileDateTime = FileDateTime::Now;
+
+        println!("Time zero {}", time.to_time());
+
+        println!("{:?}", chrono::offset::Local::now());
+        println!("{:?}", chrono::offset::Utc::now());
+        let ts = chrono::offset::Utc::now().timestamp() as i32;
+        println!("{:?}", ts);
     }
 }

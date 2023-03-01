@@ -13,7 +13,7 @@ use tokio::io::AsyncReadExt;
 use tokio::io::AsyncWrite;
 use tokio::io::AsyncWriteExt;
 
-use super::async_write_wrapper::AsyncWriteWrapper;
+use super::async_wrapper::AsyncWriteWrapper;
 
 pub const STORE: u16 = 0;
 pub const DEFALTE: u16 = 8;

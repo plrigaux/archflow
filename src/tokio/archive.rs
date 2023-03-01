@@ -1,7 +1,7 @@
 use crc32fast::Hasher;
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 
-use super::async_write_wrapper::AsyncWriteWrapper;
+use super::async_wrapper::AsyncWriteWrapper;
 use super::compression::{Compressor, Level};
 use super::descriptor::ArchiveDescriptor;
 use crate::constants::{
