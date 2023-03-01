@@ -40,7 +40,9 @@ impl<W: tokio::io::AsyncWrite + Unpin> ZipArchive<W> {
     }
 
     pub fn set_archive_comment(&mut self, comment: &str) {
-        self.archive_comment = comment.as_bytes().to_owned();
+        let bytes = comment.as_bytes();
+        let len = std::cmp::min(bytes.len(), u16::MAX as usize);
+        self.archive_comment = bytes[0..len].to_owned();
     }
 
     /// Append a new file to the archive using the provided name, date/time and `AsyncRead` object.  
@@ -311,7 +313,7 @@ impl<W: tokio::io::AsyncWrite + Unpin> ZipArchive<W> {
             total_number_of_entries: self.files_info.len() as u16,
             central_directory_size,
             central_directory_offset,
-            zip_file_comment_length: self.get_archive_comment_size(),
+            zip_file_comment_length: self.archive_comment.len() as u16,
         };
 
         let mut end_of_central_directory = ArchiveDescriptor::new(END_OF_CENTRAL_DIRECTORY_SIZE);
@@ -325,10 +327,7 @@ impl<W: tokio::io::AsyncWrite + Unpin> ZipArchive<W> {
         end_of_central_directory.write_u16(dir_end.zip_file_comment_length);
 
         if dir_end.zip_file_comment_length > 0 {
-            end_of_central_directory.write_bytes_len(
-                &self.archive_comment,
-                dir_end.zip_file_comment_length as usize,
-            );
+            end_of_central_directory.write_bytes(&self.archive_comment);
         }
 
         self.sink
@@ -337,10 +336,6 @@ impl<W: tokio::io::AsyncWrite + Unpin> ZipArchive<W> {
 
         //println!("CentralDirectoryEnd {:#?}", dir_end);
         Ok(())
-    }
-
-    fn get_archive_comment_size(&self) -> u16 {
-        u16::try_from(self.archive_comment.len()).map_or(u16::MAX, |val| val)
     }
 }
 
