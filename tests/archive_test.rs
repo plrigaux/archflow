@@ -2,7 +2,7 @@ use std::path::Path;
 
 use compstream::{
     tokio::{
-        archive::{FileOptions, ZipArchive},
+        archive::{FileOptions, ZipArchive, ZipArchiveCommon},
         compression::Compressor,
     },
     tools::archive_size,

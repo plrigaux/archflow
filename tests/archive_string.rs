@@ -1,5 +1,8 @@
 use compstream::{
-    tokio::{archive::ZipArchive, compression::Compressor},
+    tokio::{
+        archive::{ZipArchiveCommon, ZipArchiveNoStream},
+        compression::Compressor,
+    },
     types::FileDateTime,
 };
 
@@ -11,12 +14,12 @@ const FILE_TO_COMPRESS: &str = "ex.txt";
 async fn compress_file(compressor: Compressor, out_file_name: &str) {
     let file = create_new_clean_file(out_file_name).await;
 
-    let mut archive = ZipArchive::new(file);
+    let mut archive = ZipArchiveNoStream::new(file);
 
     let mut in_file = b"example".as_ref();
 
     archive
-        .append_file_no_extend(
+        .append_file(
             FILE_TO_COMPRESS,
             FileDateTime::Zero,
             compressor,

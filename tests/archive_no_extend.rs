@@ -1,7 +1,10 @@
 use std::path::Path;
 
 use compstream::{
-    tokio::{archive::ZipArchive, compression::Compressor},
+    tokio::{
+        archive::{ZipArchiveCommon, ZipArchiveNoStream},
+        compression::Compressor,
+    },
     types::FileDateTime,
 };
 mod common;
@@ -12,14 +15,14 @@ const FILE_TO_COMPRESS: &str = "short_text_file.txt";
 async fn compress_file(compressor: Compressor, out_file_name: &str) {
     let file = create_new_clean_file(out_file_name).await;
 
-    let mut archive = ZipArchive::new(file);
+    let mut archive = ZipArchiveNoStream::new(file);
 
     let path = Path::new("tests/resources").join(FILE_TO_COMPRESS);
 
     let mut in_file = tokio::fs::File::open(&path).await.unwrap();
 
     archive
-        .append_file_no_extend(
+        .append_file(
             FILE_TO_COMPRESS,
             FileDateTime::Zero,
             compressor,
