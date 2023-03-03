@@ -1,8 +1,5 @@
-use std::{
-    pin::Pin,
-    task::{Context, Poll},
-};
-use tokio::io::{AsyncSeek, AsyncWrite};
+use std::pin::Pin;
+use tokio::io::AsyncWrite;
 
 #[derive(Debug)]
 pub struct AsyncWriteWrapper<W: AsyncWrite + Unpin> {
@@ -71,7 +68,7 @@ impl<W: AsyncWrite + Unpin> AsyncWrite for AsyncWriteWrapper<W> {
         Pin::new(&mut self.get_mut().writer).poll_shutdown(cx)
     }
 }
-
+/*
 #[derive(Debug)]
 pub struct AsyncWriteSeekWrapper<W: AsyncWrite + AsyncSeek + Unpin> {
     writer_seek: W,
@@ -164,3 +161,4 @@ impl<W: AsyncWrite + AsyncSeek + Unpin> BytesCounter for AsyncWriteSeekWrapper<W
         self.written_bytes_count = count;
     }
 }
+ */

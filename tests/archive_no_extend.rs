@@ -1,11 +1,8 @@
 use std::path::Path;
 
-use compstream::{
-    tokio::{
-        archive::{ZipArchiveCommon, ZipArchiveNoStream},
-        compression::Compressor,
-    },
-    types::FileDateTime,
+use compstream::tokio::{
+    archive::{FileOptions, ZipArchiveCommon, ZipArchiveNoStream},
+    compression::Compressor,
 };
 mod common;
 use common::create_new_clean_file;
@@ -21,13 +18,9 @@ async fn compress_file(compressor: Compressor, out_file_name: &str) {
 
     let mut in_file = tokio::fs::File::open(&path).await.unwrap();
 
+    let options = FileOptions::default().compression_method(compressor);
     archive
-        .append_file(
-            FILE_TO_COMPRESS,
-            FileDateTime::Zero,
-            compressor,
-            &mut in_file,
-        )
+        .append_file(FILE_TO_COMPRESS, &mut in_file, &options)
         .await
         .unwrap();
 

@@ -1,6 +1,3 @@
-use crc32fast::Hasher;
-use tokio::io::{AsyncRead, AsyncSeek, AsyncWrite, AsyncWriteExt};
-
 use super::async_wrapper::{AsyncWriteWrapper, BytesCounter};
 use super::compression::{Compressor, Level};
 use super::descriptor::ArchiveDescriptor;
@@ -9,9 +6,11 @@ use crate::constants::{
     CENTRAL_DIRECTORY_ENTRY_SIGNATURE, DATA_DESCRIPTOR_SIGNATURE, DESCRIPTOR_SIZE,
     END_OF_CENTRAL_DIRECTORY_SIZE, FILE_HEADER_BASE_SIZE, LOCAL_FILE_HEADER_SIGNATURE,
 };
+use crc32fast::Hasher;
+use tokio::io::{AsyncRead, AsyncSeek, AsyncSeekExt, AsyncWrite, AsyncWriteExt};
 
 use crate::types::{ArchiveFileEntry, FileDateTime};
-use std::io::Error as IoError;
+use std::io::{Error as IoError, SeekFrom};
 
 #[derive(Debug)]
 pub struct ZipArchive<W: tokio::io::AsyncWrite + Unpin> {
@@ -20,9 +19,10 @@ pub struct ZipArchive<W: tokio::io::AsyncWrite + Unpin> {
 }
 
 #[derive(Debug)]
-pub struct ZipArchiveNoStream<W: tokio::io::AsyncWrite + Unpin> {
-    sink: AsyncWriteWrapper<W>,
+pub struct ZipArchiveNoStream<W: AsyncWrite + AsyncSeek + Unpin> {
+    sink: W,
     data: SubZipArchiveData,
+    archive_size: u64,
 }
 
 #[derive(Debug)]
@@ -46,7 +46,7 @@ impl<W: tokio::io::AsyncWrite + Unpin> ZipArchiveCommon for ZipArchive<W> {
     }
 }
 
-impl<W: tokio::io::AsyncWrite + Unpin> ZipArchive<W> {
+impl<W: AsyncWrite + Unpin> ZipArchive<W> {
     /// Create a new zip archive, using the underlying `AsyncWrite` to write files' header and payload.
     pub fn new(sink_: W) -> Self {
         //let buf = BufWriter::new(sink_);
@@ -200,7 +200,10 @@ impl<W: tokio::io::AsyncWrite + Unpin> ZipArchive<W> {
             central_directory_header.clear();
         }
 
-        let end_of_central_directory = build_central_directory_end(self, central_directory_offset);
+        let current_archive_size = self.sink.get_written_bytes_count();
+        let central_directory_size: u32 = current_archive_size as u32 - central_directory_offset;
+        let end_of_central_directory =
+            build_central_directory_end(self, central_directory_offset, central_directory_size);
 
         self.sink
             .write_all(end_of_central_directory.buffer())
@@ -238,9 +241,8 @@ fn build_central_directory_file_header(
 fn build_central_directory_end(
     arch: &dyn ZipArchiveCommon,
     central_directory_offset: u32,
+    central_directory_size: u32,
 ) -> ArchiveDescriptor {
-    let central_directory_size = arch.get_archive_size() as u32 - central_directory_offset;
-
     let data = arch.get_data();
     let dir_end = CentralDirectoryEnd {
         disk_number: 0,
@@ -348,93 +350,83 @@ impl Default for FileOptions {
     }
 }
 
-impl<W: tokio::io::AsyncWrite + AsyncSeek + Unpin> ZipArchiveNoStream<W> {
-    /// Create a new zip archive, using the underlying `AsyncWrite` to write files' header and payload.
-    pub fn new(sink_: W) -> Self {
+impl<W: AsyncWrite + AsyncSeek + Unpin> ZipArchiveNoStream<W> {
+    pub fn new(sink: W) -> Self {
         //let buf = BufWriter::new(sink_);
         Self {
-            sink: AsyncWriteWrapper::new(sink_),
+            sink,
             data: SubZipArchiveData {
                 files_info: Vec::new(),
                 archive_comment: Vec::new(),
             },
+            archive_size: 0,
         }
     }
 
     pub async fn append_file<R>(
         &mut self,
         file_name: &str,
-        datetime: FileDateTime,
-        compressor: Compressor,
         reader: &mut R,
+        options: &FileOptions,
     ) -> Result<(), IoError>
     where
         W: AsyncWrite + AsyncSeek + Unpin,
         R: AsyncRead + Unpin,
     {
-        let (date, time) = datetime.ms_dos();
-        let offset = self.sink.get_written_bytes_count() as u32;
-
-        let compression_method = compressor.compression_method();
-
-        let file_nameas_bytes = file_name.as_bytes();
-        let file_name_as_bytes_own = file_nameas_bytes.to_owned();
-        let file_name_len = file_name_as_bytes_own.len() as u16;
-
-        let mut general_purpose_flags: u16 = 0;
-        if file_name_as_bytes_own.len() > file_name.len() {
-            general_purpose_flags |= 1 << 11; //set utf8 flag
-        }
-
+        let file_header_offset = self.archive_size;
+        //println!("header offset {file_header_offset} {file_header_offset:0X}");
         let mut hasher = Hasher::new();
-        let buffer: Vec<u8> = Vec::new();
-        let mut async_writer = AsyncWriteWrapper::new(buffer);
+        //let buffer: Vec<u8> = Vec::new();
+        //let mut async_writer = AsyncWriteWrapper::new(buffer);
 
-        let uncompressed_size = compressor
-            .compress(&mut async_writer, reader, &mut hasher, Level::Default)
-            .await? as u32;
+        let compressor = options.compressor;
 
-        async_writer.flush().await?;
-        let retreived_buffer = async_writer.retrieve_writer();
-        let compressed_size = retreived_buffer.len() as u32;
-        let version_needed = compressor.version_needed();
-        let crc = hasher.finalize();
-        let extra_field_length = 0u16;
+        //async_writer.flush().await?;
+        //let retreived_buffer = async_writer.retrieve_writer();
 
-        let mut file_header =
-            ArchiveDescriptor::new(FILE_HEADER_BASE_SIZE + file_name_len as usize);
-        file_header.write_u32(LOCAL_FILE_HEADER_SIGNATURE);
-        file_header.write_u16(version_needed);
-        file_header.write_u16(general_purpose_flags);
-        file_header.write_u16(compression_method);
-        file_header.write_u16(time);
-        file_header.write_u16(date);
-        file_header.write_u32(crc);
-        file_header.write_u32(compressed_size);
-        file_header.write_u32(uncompressed_size);
-        file_header.write_u16(file_name_len);
-        file_header.write_u16(extra_field_length);
-        file_header.write_bytes(&file_name_as_bytes_own);
+        let (file_header, mut archive_file_entry) =
+            build_file_header(file_name, options, compressor, file_header_offset as u32);
 
         self.sink.write_all(file_header.buffer()).await?;
 
-        self.sink.write_all(&retreived_buffer).await?;
+        let file_begin = self.sink.stream_position().await?;
+        //println!("after header put: {file_begin} {file_begin:0X}");
 
-        self.data.files_info.push(ArchiveFileEntry {
-            file_name_as_bytes: file_name.as_bytes().to_owned(),
-            file_name_len,
-            compressed_size,
-            uncompressed_size,
-            crc32: crc,
-            offset,
-            last_mod_file_time: time,
-            last_mod_file_date: date,
-            compressor,
-            general_purpose_flags,
-            extra_field_length,
-            version_needed,
-            compression_method,
-        });
+        let uncompressed_size = compressor
+            .compress(&mut self.sink, reader, &mut hasher, Level::Default)
+            .await? as u32;
+
+        self.archive_size = self.sink.stream_position().await?;
+        let compressed_size = self.archive_size - file_begin;
+        //println!("after put file file: {updated_count} {updated_count:0X}");
+        //println!("compressed_size: {compressed_size} {compressed_size:0X}");
+
+        let crc32 = hasher.finalize();
+        archive_file_entry.crc32 = crc32;
+        archive_file_entry.compressed_size = compressed_size as u32;
+        archive_file_entry.uncompressed_size = uncompressed_size;
+        //self.sink.write_all(&retreived_buffer).await?;
+
+        //TODO
+        const CRC_OFFSET: u64 = 14;
+        self.sink
+            .seek(SeekFrom::Start(file_header_offset + CRC_OFFSET))
+            .await?;
+
+        self.sink.write_u32_le(crc32).await?;
+        self.sink.write_u32_le(compressed_size as u32).await?;
+        self.sink.write_u32_le(uncompressed_size).await?;
+        //self.sink.flush().await?;
+
+        self.sink.seek(SeekFrom::Start(self.archive_size)).await?;
+
+        //let after_file_data = self.sink.stream_position().await?;
+        //println!("after file data: {after_file_data} {after_file_data:0X}");
+
+        //let written_bytes_count = self.sink.stream_position().await?;
+        //println!("reset count {written_bytes_count} {written_bytes_count:0X}");
+
+        self.data.files_info.push(archive_file_entry);
 
         Ok(())
     }
@@ -452,7 +444,7 @@ impl<W: tokio::io::AsyncWrite + AsyncSeek + Unpin> ZipArchiveNoStream<W> {
     where
         W: AsyncWrite + Unpin,
     {
-        let central_directory_offset = self.sink.get_written_bytes_count() as u32;
+        let central_directory_offset = self.sink.stream_position().await? as u32;
 
         let mut central_directory_header =
             ArchiveDescriptor::new(CENTRAL_DIRECTORY_ENTRY_BASE_SIZE + 200);
@@ -467,23 +459,78 @@ impl<W: tokio::io::AsyncWrite + AsyncSeek + Unpin> ZipArchiveNoStream<W> {
             central_directory_header.clear();
         }
 
-        let end_of_central_directory = build_central_directory_end(self, central_directory_offset);
+        let current_archive_size = self.sink.stream_position().await?;
+        let central_directory_size: u32 = current_archive_size as u32 - central_directory_offset;
+
+        let end_of_central_directory =
+            build_central_directory_end(self, central_directory_offset, central_directory_size);
 
         self.sink
             .write_all(end_of_central_directory.buffer())
             .await?;
 
+        self.archive_size = self.sink.stream_position().await?;
         //println!("CentralDirectoryEnd {:#?}", dir_end);
         Ok(())
     }
 }
 
-impl<W: AsyncWrite + AsyncSeek + Unpin> ZipArchiveCommon for ZipArchiveNoStream<W> {
-    fn get_archive_size(&self) -> usize {
-        (&self.sink as &dyn BytesCounter).get_written_bytes_count()
-    }
+fn build_file_header(
+    file_name: &str,
+    options: &FileOptions,
+    compressor: Compressor,
+    offset: u32,
+) -> (ArchiveDescriptor, ArchiveFileEntry) {
+    let file_nameas_bytes = file_name.as_bytes();
+    let file_name_as_bytes_own = file_nameas_bytes.to_owned();
+    let file_name_len = file_name_as_bytes_own.len() as u16;
 
+    let (date, time) = options.last_modified_time.ms_dos();
+    let mut general_purpose_flags: u16 = 0;
+    if file_name_as_bytes_own.len() > file_name.len() {
+        general_purpose_flags |= 1 << 11; //set utf8 flag
+    }
+    let version_needed = compressor.version_needed();
+    let compression_method = compressor.compression_method();
+    let mut file_header = ArchiveDescriptor::new(FILE_HEADER_BASE_SIZE + file_name_len as usize);
+    file_header.write_u32(LOCAL_FILE_HEADER_SIGNATURE);
+    file_header.write_u16(version_needed);
+    file_header.write_u16(general_purpose_flags);
+    file_header.write_u16(compression_method);
+    file_header.write_u16(time);
+    file_header.write_u16(date);
+    file_header.write_u32(0);
+    file_header.write_u32(0);
+    file_header.write_u32(0);
+    file_header.write_u16(file_name_len);
+    file_header.write_u16(0);
+    file_header.write_bytes(&file_name_as_bytes_own);
+
+    let archive_file_entry = ArchiveFileEntry {
+        file_name_as_bytes: file_name.as_bytes().to_owned(),
+        file_name_len,
+        compressed_size: 0,
+        uncompressed_size: 0,
+        crc32: 0,
+        offset,
+        last_mod_file_time: time,
+        last_mod_file_date: date,
+        compressor,
+        general_purpose_flags,
+        extra_field_length: 0,
+        version_needed,
+        compression_method,
+    };
+
+    (file_header, archive_file_entry)
+}
+
+impl<W: AsyncWrite + AsyncSeek + Unpin> ZipArchiveCommon for ZipArchiveNoStream<W> {
     fn get_data(&self) -> &SubZipArchiveData {
         &self.data
+    }
+
+    fn get_archive_size(&self) -> usize {
+        self.archive_size as usize
     }
 }

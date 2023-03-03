@@ -1,9 +1,6 @@
-use compstream::{
-    tokio::{
-        archive::{ZipArchiveCommon, ZipArchiveNoStream},
-        compression::Compressor,
-    },
-    types::FileDateTime,
+use compstream::tokio::{
+    archive::{FileOptions, ZipArchiveCommon, ZipArchiveNoStream},
+    compression::Compressor,
 };
 
 mod common;
@@ -17,19 +14,18 @@ async fn compress_file(compressor: Compressor, out_file_name: &str) {
     let mut archive = ZipArchiveNoStream::new(file);
 
     let mut in_file = b"example".as_ref();
-
+    let options = FileOptions::default().compression_method(compressor);
     archive
-        .append_file(
-            FILE_TO_COMPRESS,
-            FileDateTime::Zero,
-            compressor,
-            &mut in_file,
-        )
+        .append_file(FILE_TO_COMPRESS, &mut in_file, &options)
         .await
         .unwrap();
 
     archive.finalize().await.unwrap();
-    println!("archive size = {:?}", archive.get_archive_size());
+    println!(
+        "file {:?} archive size = {:?}",
+        out_file_name,
+        archive.get_archive_size()
+    );
     //let data = archive.finalize().await.unwrap();
 }
 

@@ -13,8 +13,6 @@ use tokio::io::AsyncReadExt;
 use tokio::io::AsyncWrite;
 use tokio::io::AsyncWriteExt;
 
-use super::async_wrapper::AsyncWriteWrapper;
-
 pub const STORE: u16 = 0;
 pub const DEFALTE: u16 = 8;
 pub const BZIP2: u16 = 12;
@@ -110,7 +108,7 @@ impl Compressor {
 
     pub async fn compress<'a, R, W>(
         &self,
-        writer: &'a mut AsyncWriteWrapper<W>,
+        writer: &'a mut W,
         reader: &'a mut R,
         hasher: &'a mut Hasher,
         compression_level: Level,
@@ -134,6 +132,7 @@ impl Compressor {
                     hasher.update(&buf[..read]);
                     writer.write_all(&buf[..read]).await?;
                 }
+                writer.flush().await?;
 
                 Ok(total_read)
             }
@@ -211,6 +210,8 @@ impl Level {
 
 #[cfg(test)]
 mod test {
+    use crate::tokio::async_wrapper::AsyncWriteWrapper;
+
     use super::*;
     use async_compression::tokio::write::ZlibEncoder;
     use flate2::write::DeflateEncoder as DeflateEncoderFlate2;
