@@ -1,8 +1,6 @@
 use compstream::{
-    tokio::{
-        archive::{FileOptions, ZipArchive},
-        compression::Compressor,
-    },
+    compression::Compressor,
+    tokio::archive::{FileOptions, ZipArchive},
     types::FileDateTime,
 };
 use std::io::Cursor;

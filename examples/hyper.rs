@@ -1,6 +1,6 @@
+use compstream::compression::Compressor;
 use compstream::tokio::archive::FileOptions;
-use compstream::tools::archive_size;
-use compstream::{tokio::archive::ZipArchive, tokio::compression::Compressor, types::FileDateTime};
+use compstream::{tokio::archive::ZipArchive, types::FileDateTime};
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{header, Body, Request, Response, Server, StatusCode};
 use std::io::Cursor;
@@ -10,14 +10,10 @@ use tokio_util::io::ReaderStream;
 async fn zip_archive(_req: Request<Body>) -> Result<Response<Body>, hyper::http::Error> {
     let (filename_1, mut fd_1) = (String::from("file1.txt"), Cursor::new(b"hello\n".to_vec()));
     let (filename_2, mut fd_2) = (String::from("file2.txt"), Cursor::new(b"world\n".to_vec()));
-    let archive_size = archive_size([
-        (filename_1.as_ref(), fd_1.get_ref().len()),
-        (filename_2.as_ref(), fd_2.get_ref().len()),
-    ]);
 
     let (w, r) = duplex(4096);
     let options = FileOptions::default()
-        .compression_method(Compressor::Store())
+        .compression_method(Compressor::Deflate())
         .last_modified_time(FileDateTime::Now);
     tokio::spawn(async move {
         let mut archive = ZipArchive::new(w);
@@ -34,7 +30,6 @@ async fn zip_archive(_req: Request<Body>) -> Result<Response<Body>, hyper::http:
 
     Response::builder()
         .status(StatusCode::OK)
-        .header(header::CONTENT_LENGTH, archive_size)
         .header(header::CONTENT_TYPE, "application/zip")
         .body(Body::wrap_stream(ReaderStream::new(r)))
 }

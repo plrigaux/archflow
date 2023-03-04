@@ -1,21 +1,17 @@
 use super::async_wrapper::{AsyncWriteWrapper, BytesCounter};
-use super::compressor::{self, compress};
-
-use crate::compression::{Compressor, Level};
+use super::compression::{Compressor, Level};
+use super::descriptor::ArchiveDescriptor;
 use crate::constants::{
     CENTRAL_DIRECTORY_END_SIGNATURE, CENTRAL_DIRECTORY_ENTRY_BASE_SIZE,
     CENTRAL_DIRECTORY_ENTRY_SIGNATURE, DATA_DESCRIPTOR_SIGNATURE, DESCRIPTOR_SIZE,
     END_OF_CENTRAL_DIRECTORY_SIZE, FILE_HEADER_BASE_SIZE, FILE_HEADER_CRC_OFFSET,
     LOCAL_FILE_HEADER_SIGNATURE,
 };
-use crate::descriptor::ArchiveDescriptor;
-use crate::error::ArchiveError;
-
 use crc32fast::Hasher;
 use tokio::io::{AsyncRead, AsyncSeek, AsyncSeekExt, AsyncWrite, AsyncWriteExt};
 
 use crate::types::{ArchiveFileEntry, FileDateTime};
-use std::io::SeekFrom;
+use std::io::{Error as IoError, SeekFrom};
 
 #[derive(Debug)]
 pub struct ZipArchive<W: tokio::io::AsyncWrite + Unpin> {
@@ -91,7 +87,7 @@ impl<W: AsyncWrite + Unpin> ZipArchive<W> {
         file_name: &str,
         reader: &mut R,
         options: &FileOptions,
-    ) -> Result<(), ArchiveError>
+    ) -> Result<(), IoError>
     where
         W: AsyncWrite + Unpin,
         R: AsyncRead + Unpin,
@@ -136,14 +132,14 @@ impl<W: AsyncWrite + Unpin> ZipArchive<W> {
         let mut hasher = Hasher::new();
         let cur_size = self.sink.get_written_bytes_count();
 
-        let uncompressed_size = compressor::compress(
-            compressor,
-            &mut self.sink,
-            reader,
-            &mut hasher,
-            options.compression_level,
-        )
-        .await?;
+        let uncompressed_size = compressor
+            .compress(
+                &mut self.sink,
+                reader,
+                &mut hasher,
+                options.compression_level,
+            )
+            .await?;
 
         //self.sink.flush().await?;
         let compressed_size = self.sink.get_written_bytes_count() - cur_size;
@@ -186,7 +182,7 @@ impl<W: AsyncWrite + Unpin> ZipArchive<W> {
     /// # Features
     ///
     /// Requires `tokio-async-io` feature. `futures-async-io` is also available.
-    pub async fn finalize(&mut self) -> Result<(), ArchiveError>
+    pub async fn finalize(&mut self) -> Result<(), IoError>
     where
         W: AsyncWrite + Unpin,
     {
@@ -374,7 +370,7 @@ impl<W: AsyncWrite + AsyncSeek + Unpin> ZipArchiveNoStream<W> {
         file_name: &str,
         reader: &mut R,
         options: &FileOptions,
-    ) -> Result<(), ArchiveError>
+    ) -> Result<(), IoError>
     where
         W: AsyncWrite + AsyncSeek + Unpin,
         R: AsyncRead + Unpin,
@@ -391,14 +387,9 @@ impl<W: AsyncWrite + AsyncSeek + Unpin> ZipArchiveNoStream<W> {
         let file_begin = self.sink.stream_position().await?;
         //println!("after header put: {file_begin} {file_begin:0X}");
 
-        let uncompressed_size = compress(
-            compressor,
-            &mut self.sink,
-            reader,
-            &mut hasher,
-            Level::Default,
-        )
-        .await? as u32;
+        let uncompressed_size = compressor
+            .compress(&mut self.sink, reader, &mut hasher, Level::Default)
+            .await? as u32;
 
         self.archive_size = self.sink.stream_position().await?;
         let compressed_size = self.archive_size - file_begin;
@@ -435,7 +426,7 @@ impl<W: AsyncWrite + AsyncSeek + Unpin> ZipArchiveNoStream<W> {
     /// # Features
     ///
     /// Requires `tokio-async-io` feature. `futures-async-io` is also available.
-    pub async fn finalize(&mut self) -> Result<(), ArchiveError>
+    pub async fn finalize(&mut self) -> Result<(), IoError>
     where
         W: AsyncWrite + Unpin,
     {

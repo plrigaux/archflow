@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use std::str;
 use std::u32;
 use std::u8;

@@ -1,4 +1,3 @@
 pub mod archive;
-pub mod async_wrapper;
-pub mod compression;
-pub mod descriptor;
+mod async_wrapper;
+mod compressor;
