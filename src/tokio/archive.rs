@@ -4,7 +4,8 @@ use super::descriptor::ArchiveDescriptor;
 use crate::constants::{
     CENTRAL_DIRECTORY_END_SIGNATURE, CENTRAL_DIRECTORY_ENTRY_BASE_SIZE,
     CENTRAL_DIRECTORY_ENTRY_SIGNATURE, DATA_DESCRIPTOR_SIGNATURE, DESCRIPTOR_SIZE,
-    END_OF_CENTRAL_DIRECTORY_SIZE, FILE_HEADER_BASE_SIZE, LOCAL_FILE_HEADER_SIGNATURE,
+    END_OF_CENTRAL_DIRECTORY_SIZE, FILE_HEADER_BASE_SIZE, FILE_HEADER_CRC_OFFSET,
+    LOCAL_FILE_HEADER_SIGNATURE,
 };
 use crc32fast::Hasher;
 use tokio::io::{AsyncRead, AsyncSeek, AsyncSeekExt, AsyncWrite, AsyncWriteExt};
@@ -374,15 +375,8 @@ impl<W: AsyncWrite + AsyncSeek + Unpin> ZipArchiveNoStream<W> {
         R: AsyncRead + Unpin,
     {
         let file_header_offset = self.archive_size;
-        //println!("header offset {file_header_offset} {file_header_offset:0X}");
         let mut hasher = Hasher::new();
-        //let buffer: Vec<u8> = Vec::new();
-        //let mut async_writer = AsyncWriteWrapper::new(buffer);
-
         let compressor = options.compressor;
-
-        //async_writer.flush().await?;
-        //let retreived_buffer = async_writer.retrieve_writer();
 
         let (file_header, mut archive_file_entry) =
             build_file_header(file_name, options, compressor, file_header_offset as u32);
@@ -398,33 +392,24 @@ impl<W: AsyncWrite + AsyncSeek + Unpin> ZipArchiveNoStream<W> {
 
         self.archive_size = self.sink.stream_position().await?;
         let compressed_size = self.archive_size - file_begin;
-        //println!("after put file file: {updated_count} {updated_count:0X}");
-        //println!("compressed_size: {compressed_size} {compressed_size:0X}");
 
         let crc32 = hasher.finalize();
         archive_file_entry.crc32 = crc32;
         archive_file_entry.compressed_size = compressed_size as u32;
         archive_file_entry.uncompressed_size = uncompressed_size;
-        //self.sink.write_all(&retreived_buffer).await?;
 
-        //TODO
-        const CRC_OFFSET: u64 = 14;
+        let mut file_data = ArchiveDescriptor::new(3 * 4);
+        file_data.write_u32(crc32);
+        file_data.write_u32(compressed_size as u32);
+        file_data.write_u32(uncompressed_size);
+
         self.sink
-            .seek(SeekFrom::Start(file_header_offset + CRC_OFFSET))
+            .seek(SeekFrom::Start(file_header_offset + FILE_HEADER_CRC_OFFSET))
             .await?;
 
-        self.sink.write_u32_le(crc32).await?;
-        self.sink.write_u32_le(compressed_size as u32).await?;
-        self.sink.write_u32_le(uncompressed_size).await?;
-        //self.sink.flush().await?;
+        self.sink.write_all(file_data.buffer()).await?;
 
         self.sink.seek(SeekFrom::Start(self.archive_size)).await?;
-
-        //let after_file_data = self.sink.stream_position().await?;
-        //println!("after file data: {after_file_data} {after_file_data:0X}");
-
-        //let written_bytes_count = self.sink.stream_position().await?;
-        //println!("reset count {written_bytes_count} {written_bytes_count:0X}");
 
         self.data.files_info.push(archive_file_entry);
 
