@@ -1,5 +1,5 @@
+use compstream::archive::FileOptions;
 use compstream::compression::Compressor;
-use compstream::tokio::archive::FileOptions;
 use compstream::{tokio::archive::ZipArchive, types::FileDateTime};
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{header, Body, Request, Response, Server, StatusCode};

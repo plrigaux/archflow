@@ -1,6 +1,5 @@
 use compstream::{
-    compression::Compressor,
-    tokio::archive::{FileOptions, ZipArchiveCommon, ZipArchiveNoStream},
+    archive::FileOptions, compression::Compressor, tokio::archive::ZipArchiveNoStream,
 };
 
 mod common;

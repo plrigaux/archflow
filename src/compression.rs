@@ -23,7 +23,6 @@ impl Compressor {
         match self {
             Compressor::Store() => STORE,
             Compressor::Deflate() => DEFALTE,
-            //   Compressor::DeflateFate2() => DEFALTE,
             Compressor::BZip2() => BZIP2,
             Compressor::Lzma() => LZMA,
             Compressor::Zstd() => ZSTD,
@@ -60,7 +59,6 @@ impl Compressor {
         match self {
             Compressor::Store() => "store",
             Compressor::Deflate() => "deflate",
-            //Compressor::DeflateFate2() => "deflate",
             Compressor::BZip2() => "bzip2",
             Compressor::Lzma() => "lzma",
             Compressor::Zstd() => "zstd",
@@ -71,6 +69,26 @@ impl Compressor {
 
     pub fn is_unknown(&self) -> bool {
         matches!(self, Compressor::Unknown(_))
+    }
+
+    pub fn update_general_purpose_bit_flag(&self, flag: u16, level: Level) -> u16 {
+        const BIT1: u16 = 1 << 1; //2
+        const BIT2: u16 = 1 << 2; //4
+        match self {
+            Compressor::Deflate() => match level {
+                Level::Fastest => flag | BIT2, //1      1    Super Fast (-es) compression option was used. //1      0    Fast (-ef) compression option was used.
+                Level::Best => flag | BIT1, // 0      1    Maximum (-exx/-ex) compression option was used.
+                Level::Default => flag,     // 0      0    Normal (-en) compression option was used.
+                Level::Precise(val) => match val {
+                    1..=2 => self.update_general_purpose_bit_flag(flag, Level::Fastest),
+                    6 => self.update_general_purpose_bit_flag(flag, Level::Default),
+                    8.. => self.update_general_purpose_bit_flag(flag, Level::Best),
+                    _ => flag,
+                },
+            },
+
+            _ => flag,
+        }
     }
 }
 
@@ -86,4 +104,52 @@ pub enum Level {
     Best,
     Default,
     Precise(u32),
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn update_general_purpose_bit_flag() {
+        assert_eq!(
+            Compressor::Deflate().update_general_purpose_bit_flag(0, Level::Default),
+            0
+        );
+
+        assert_eq!(
+            Compressor::Deflate().update_general_purpose_bit_flag(123, Level::Default),
+            123
+        );
+
+        assert_eq!(
+            Compressor::Deflate().update_general_purpose_bit_flag(0, Level::Best),
+            Compressor::Deflate().update_general_purpose_bit_flag(0, Level::Precise(1252345))
+        );
+
+        assert_eq!(
+            Compressor::Deflate().update_general_purpose_bit_flag(0, Level::Best),
+            Compressor::Deflate().update_general_purpose_bit_flag(0, Level::Precise(8))
+        );
+
+        assert_eq!(
+            Compressor::Deflate().update_general_purpose_bit_flag(0, Level::Fastest),
+            Compressor::Deflate().update_general_purpose_bit_flag(0, Level::Precise(1))
+        );
+
+        assert_eq!(
+            Compressor::Deflate().update_general_purpose_bit_flag(0, Level::Fastest),
+            Compressor::Deflate().update_general_purpose_bit_flag(0, Level::Precise(2))
+        );
+
+        assert_eq!(
+            Compressor::Deflate().update_general_purpose_bit_flag(0, Level::Fastest),
+            4
+        );
+
+        assert_eq!(
+            Compressor::Store().update_general_purpose_bit_flag(0, Level::Fastest),
+            0
+        );
+    }
 }

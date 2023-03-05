@@ -1,34 +1,11 @@
 use std::path::Path;
 
-use compstream::{
-    compression::Compressor,
-    tokio::archive::{FileOptions, ZipArchive, ZipArchiveCommon},
-    tools::archive_size,
-};
+use compstream::{archive::FileOptions, compression::Compressor, tokio::archive::ZipArchive};
 mod common;
 use common::create_new_clean_file;
 
 const TEST_ID: &str = "1";
 const FILE_TO_COMPRESS: &str = "file1.txt";
-
-#[test]
-fn archive_size_test() {
-    assert_eq!(
-        archive_size([
-            ("file1.txt", b"hello\n".len()),
-            ("file2.txt", b"world\n".len()),
-        ]),
-        254,
-    );
-    assert_eq!(
-        archive_size([
-            ("file1.txt", b"hello\n".len()),
-            ("file2.txt", b"world\n".len()),
-            ("file3.txt", b"how are you?\n".len()),
-        ]),
-        377,
-    );
-}
 
 async fn compress_file(compressor: Compressor, out_file_name: &str) {
     let file = create_new_clean_file(out_file_name).await;

@@ -1,7 +1,8 @@
 mod constants;
 
+pub mod archive;
+mod archive_common;
 pub mod compression;
-mod descriptor;
 pub mod error;
 pub mod std;
 pub mod tokio;
