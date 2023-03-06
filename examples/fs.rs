@@ -1,5 +1,6 @@
 use compstream::{
-    archive::FileOptions, compression::Compressor, tokio::archive::ZipArchive, types::FileDateTime,
+    archive::FileOptions, compression::CompressionMethod, tokio::archive::ZipArchive,
+    types::FileDateTime,
 };
 use std::io::Cursor;
 use tokio::fs::File;
@@ -9,7 +10,7 @@ async fn main() {
     let file = File::create("archive.zip").await.unwrap();
 
     let options = FileOptions::default()
-        .compression_method(Compressor::Store())
+        .compression_method(CompressionMethod::Store())
         .last_modified_time(FileDateTime::Now);
     let mut archive = ZipArchive::new(file);
     archive

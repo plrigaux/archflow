@@ -1,5 +1,5 @@
 use compstream::archive::FileOptions;
-use compstream::compression::Compressor;
+use compstream::compression::CompressionMethod;
 use compstream::{tokio::archive::ZipArchive, types::FileDateTime};
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{header, Body, Request, Response, Server, StatusCode};
@@ -13,7 +13,7 @@ async fn zip_archive(_req: Request<Body>) -> Result<Response<Body>, hyper::http:
 
     let (w, r) = duplex(4096);
     let options = FileOptions::default()
-        .compression_method(Compressor::Deflate())
+        .compression_method(CompressionMethod::Deflate())
         .last_modified_time(FileDateTime::Now);
     tokio::spawn(async move {
         let mut archive = ZipArchive::new(w);

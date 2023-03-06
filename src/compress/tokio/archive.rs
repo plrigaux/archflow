@@ -2,9 +2,7 @@ use super::async_wrapper::{AsyncWriteWrapper, BytesCounter};
 use super::compressor::{self, compress};
 
 use crate::archive::FileOptions;
-use crate::archive_common::{
-    build_file_header, ArchiveDescriptor, SubZipArchiveData, ZipArchiveCommon,
-};
+use crate::archive_common::{ArchiveDescriptor, SubZipArchiveData, ZipArchiveCommon};
 use crate::compression::Level;
 use crate::constants::{
     CENTRAL_DIRECTORY_ENTRY_BASE_SIZE, DATA_DESCRIPTOR_SIGNATURE, DESCRIPTOR_SIZE,
@@ -89,7 +87,7 @@ impl<W: AsyncWrite + Unpin> ZipArchive<W> {
         let file_header_offset = self.sink.get_written_bytes_count();
 
         let (file_header, mut archive_file_entry) =
-            build_file_header(file_name, options, compressor, file_header_offset as u32);
+            self.build_file_header(file_name, options, compressor, file_header_offset as u32);
 
         self.sink.write_all(file_header.buffer()).await?;
 
@@ -193,7 +191,7 @@ impl<W: AsyncWrite + AsyncSeek + Unpin> ZipArchiveNoStream<W> {
         let compressor = options.compressor;
 
         let (file_header, mut archive_file_entry) =
-            build_file_header(file_name, options, compressor, file_header_offset as u32);
+            self.build_file_header(file_name, options, compressor, file_header_offset as u32);
 
         self.sink.write_all(file_header.buffer()).await?;
 

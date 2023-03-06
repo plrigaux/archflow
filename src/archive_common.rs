@@ -3,7 +3,7 @@ use std::str;
 use std::u32;
 use std::u8;
 
-use super::compression::Compressor;
+use super::compression::CompressionMethod;
 use crate::archive::FileOptions;
 
 use crate::constants::CENTRAL_DIRECTORY_END_SIGNATURE;
@@ -78,6 +78,62 @@ pub trait ZipArchiveCommon {
             end_of_central_directory.write_bytes(&data.archive_comment);
         }
         end_of_central_directory
+    }
+
+    fn build_file_header(
+        &mut self,
+        file_name: &str,
+        options: &FileOptions,
+        compressor: CompressionMethod,
+        offset: u32,
+    ) -> (ArchiveDescriptor, ArchiveFileEntry) {
+        let file_nameas_bytes = file_name.as_bytes();
+        let file_name_as_bytes_own = file_nameas_bytes.to_owned();
+        let file_name_len = file_name_as_bytes_own.len() as u16;
+
+        let (date, time) = options.last_modified_time.ms_dos();
+        let mut general_purpose_flags: u16 = 0;
+        if file_name_as_bytes_own.len() > file_name.len() {
+            general_purpose_flags |= 1 << 11; //set utf8 flag
+        }
+
+        general_purpose_flags = compressor
+            .update_general_purpose_bit_flag(general_purpose_flags, options.compression_level);
+
+        let version_needed = compressor.version_needed();
+        let compression_method = compressor.zip_code();
+        let mut file_header =
+            ArchiveDescriptor::new(FILE_HEADER_BASE_SIZE + file_name_len as usize);
+        file_header.write_u32(LOCAL_FILE_HEADER_SIGNATURE);
+        file_header.write_u16(version_needed);
+        file_header.write_u16(general_purpose_flags);
+        file_header.write_u16(compression_method);
+        file_header.write_u16(time);
+        file_header.write_u16(date);
+        file_header.write_u32(0);
+        file_header.write_u32(0);
+        file_header.write_u32(0);
+        file_header.write_u16(file_name_len);
+        file_header.write_u16(0);
+        file_header.write_bytes(&file_name_as_bytes_own);
+
+        let archive_file_entry = ArchiveFileEntry {
+            file_name_as_bytes: file_name.as_bytes().to_owned(),
+            file_name_len,
+            compressed_size: 0,
+            uncompressed_size: 0,
+            crc32: 0,
+            offset,
+            last_mod_file_time: time,
+            last_mod_file_date: date,
+            compressor,
+            general_purpose_flags,
+            extra_field_length: 0,
+            version_needed,
+            compression_method,
+        };
+
+        (file_header, archive_file_entry)
     }
 }
 
@@ -174,7 +230,7 @@ impl ArchiveDescriptor {
             offset: 0,
 
             compression_method,
-            compressor: Compressor::from_compression_method(compression_method),
+            compressor: CompressionMethod::from_compression_method(compression_method),
         }
     }
 
@@ -244,60 +300,6 @@ impl ArchiveDescriptorReader {
     }
 }
 
-pub fn build_file_header(
-    file_name: &str,
-    options: &FileOptions,
-    compressor: Compressor,
-    offset: u32,
-) -> (ArchiveDescriptor, ArchiveFileEntry) {
-    let file_nameas_bytes = file_name.as_bytes();
-    let file_name_as_bytes_own = file_nameas_bytes.to_owned();
-    let file_name_len = file_name_as_bytes_own.len() as u16;
-
-    let (date, time) = options.last_modified_time.ms_dos();
-    let mut general_purpose_flags: u16 = 0;
-    if file_name_as_bytes_own.len() > file_name.len() {
-        general_purpose_flags |= 1 << 11; //set utf8 flag
-    }
-
-    general_purpose_flags = compressor
-        .update_general_purpose_bit_flag(general_purpose_flags, options.compression_level);
-
-    let version_needed = compressor.version_needed();
-    let compression_method = compressor.compression_method();
-    let mut file_header = ArchiveDescriptor::new(FILE_HEADER_BASE_SIZE + file_name_len as usize);
-    file_header.write_u32(LOCAL_FILE_HEADER_SIGNATURE);
-    file_header.write_u16(version_needed);
-    file_header.write_u16(general_purpose_flags);
-    file_header.write_u16(compression_method);
-    file_header.write_u16(time);
-    file_header.write_u16(date);
-    file_header.write_u32(0);
-    file_header.write_u32(0);
-    file_header.write_u32(0);
-    file_header.write_u16(file_name_len);
-    file_header.write_u16(0);
-    file_header.write_bytes(&file_name_as_bytes_own);
-
-    let archive_file_entry = ArchiveFileEntry {
-        file_name_as_bytes: file_name.as_bytes().to_owned(),
-        file_name_len,
-        compressed_size: 0,
-        uncompressed_size: 0,
-        crc32: 0,
-        offset,
-        last_mod_file_time: time,
-        last_mod_file_date: date,
-        compressor,
-        general_purpose_flags,
-        extra_field_length: 0,
-        version_needed,
-        compression_method,
-    };
-
-    (file_header, archive_file_entry)
-}
-
 #[cfg(test)]
 mod test {
 
@@ -307,8 +309,8 @@ mod test {
 
     #[test]
     fn test_write_file_header() {
-        let version_needed = Compressor::Deflate().version_needed();
-        let compression_method = Compressor::Deflate().compression_method();
+        let version_needed = CompressionMethod::Deflate().version_needed();
+        let compression_method = CompressionMethod::Deflate().zip_code();
         let general_purpose_flags: u16 = 1 << 3 | 1 << 11;
         let time = 0u16;
         let date = 0u16;

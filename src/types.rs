@@ -1,7 +1,7 @@
 use core::fmt;
 use std::u16;
 
-use crate::{compression::Compressor, constants::VERSION_MADE_BY};
+use crate::{compression::CompressionMethod, constants::VERSION_MADE_BY};
 use chrono::{DateTime, Datelike, Local, NaiveDate, TimeZone, Timelike, Utc};
 
 #[derive(Debug)]
@@ -18,14 +18,14 @@ pub struct ArchiveFileEntry {
     pub extra_field_length: u16,
     pub file_name_as_bytes: Vec<u8>,
     pub offset: u32,
-    pub compressor: Compressor,
+    pub compressor: CompressionMethod,
 }
 
 impl ArchiveFileEntry {
     pub fn version_needed(&self) -> u16 {
         // higher versions matched first
         match self.compressor {
-            Compressor::BZip2() => 46,
+            CompressionMethod::BZip2() => 46,
             _ => 20,
         }
     }
@@ -74,17 +74,17 @@ impl fmt::Display for ArchiveFileEntry {
             "general purpose bit flag:", self.general_purpose_flags
         )?;
 
-        let compressor = Compressor::from_compression_method(self.compression_method);
+        let compressor = CompressionMethod::from_compression_method(self.compression_method);
         let label = if compressor.is_unknown() {
             let str_val = self.compression_method.to_string();
 
-            let mut val = String::from(compressor.compression_method_label());
+            let mut val = String::from(compressor.label());
             val.push_str(" (");
             val.push_str(&str_val);
             val.push(')');
             val
         } else {
-            compressor.compression_method_label().to_owned()
+            compressor.label().to_owned()
         };
         writeln!(f, "{: <padding$}{}", "compression method:", label)?;
 

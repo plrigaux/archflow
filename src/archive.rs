@@ -1,12 +1,12 @@
 use crate::{
-    compression::{Compressor, Level},
+    compression::{CompressionMethod, Level},
     types::FileDateTime,
 };
 
 /// Metadata for a file to be written
 #[derive(Clone)]
 pub struct FileOptions {
-    pub compressor: Compressor,
+    pub compressor: CompressionMethod,
     pub compression_level: Level,
     pub last_modified_time: FileDateTime,
     pub permissions: Option<u32>,
@@ -17,7 +17,7 @@ impl FileOptions {
     ///
     /// The default is `CompressionMethod::Deflated`. If the deflate compression feature is
     /// disabled, `CompressionMethod::Stored` becomes the default.
-    pub fn compression_method(mut self, method: Compressor) -> FileOptions {
+    pub fn compression_method(mut self, method: CompressionMethod) -> FileOptions {
         self.compressor = method;
         self
     }
@@ -64,7 +64,7 @@ impl Default for FileOptions {
     /// Construct a new FileOptions object
     fn default() -> Self {
         Self {
-            compressor: Compressor::Deflate(),
+            compressor: CompressionMethod::Deflate(),
             compression_level: Level::Default,
             last_modified_time: FileDateTime::default(),
             permissions: None,

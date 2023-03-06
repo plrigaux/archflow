@@ -1,13 +1,15 @@
 use std::path::Path;
 
-use compstream::{archive::FileOptions, compression::Compressor, tokio::archive::ZipArchive};
+use compstream::{
+    archive::FileOptions, compression::CompressionMethod, tokio::archive::ZipArchive,
+};
 mod common;
 use common::create_new_clean_file;
 
 const TEST_ID: &str = "1";
 const FILE_TO_COMPRESS: &str = "file1.txt";
 
-async fn compress_file(compressor: Compressor, out_file_name: &str) {
+async fn compress_file(compressor: CompressionMethod, out_file_name: &str) {
     let file = create_new_clean_file(out_file_name).await;
 
     let mut archive = ZipArchive::new(file);
@@ -28,7 +30,7 @@ async fn compress_file(compressor: Compressor, out_file_name: &str) {
 
 #[tokio::test]
 async fn archive_structure_compress_store() {
-    let compressor = Compressor::Store();
+    let compressor = CompressionMethod::Store();
     let out_file_name = ["test_", &compressor.to_string(), TEST_ID, ".zip"].join("");
 
     compress_file(compressor, &out_file_name).await;
@@ -36,7 +38,7 @@ async fn archive_structure_compress_store() {
 
 #[tokio::test]
 async fn archive_structure_zlib_deflate_tokio() {
-    let compressor = Compressor::Deflate();
+    let compressor = CompressionMethod::Deflate();
     let out_file_name = ["test_", &compressor.to_string(), "_tokio", TEST_ID, ".zip"].join("");
 
     compress_file(compressor, &out_file_name).await;
@@ -52,7 +54,7 @@ async fn archive_structure_zlib_deflate_flate2() {
  */
 #[tokio::test]
 async fn archive_structure_compress_bzip() {
-    let compressor = Compressor::BZip2();
+    let compressor = CompressionMethod::BZip2();
     let out_file_name = ["test_", &compressor.to_string(), TEST_ID, ".zip"].join("");
 
     compress_file(compressor, &out_file_name).await;
@@ -60,7 +62,7 @@ async fn archive_structure_compress_bzip() {
 
 #[tokio::test]
 async fn archive_structure_compress_lzma() {
-    let compressor = Compressor::Lzma();
+    let compressor = CompressionMethod::Lzma();
     let out_file_name = ["test_", &compressor.to_string(), TEST_ID, ".zip"].join("");
 
     compress_file(compressor, &out_file_name).await;
@@ -68,7 +70,7 @@ async fn archive_structure_compress_lzma() {
 
 #[tokio::test]
 async fn archive_structure_compress_zstd() {
-    let compressor = Compressor::Zstd();
+    let compressor = CompressionMethod::Zstd();
     let out_file_name = ["test_", &compressor.to_string(), TEST_ID, ".zip"].join("");
 
     compress_file(compressor, &out_file_name).await;
@@ -76,7 +78,7 @@ async fn archive_structure_compress_zstd() {
 
 #[tokio::test]
 async fn archive_structure_compress_xz() {
-    let compressor = Compressor::Xz();
+    let compressor = CompressionMethod::Xz();
     let out_file_name = ["test_", &compressor.to_string(), TEST_ID, ".zip"].join("");
 
     compress_file(compressor, &out_file_name).await;
