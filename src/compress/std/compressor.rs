@@ -5,7 +5,10 @@ use crc32fast::Hasher;
 use flate2::{write::DeflateEncoder, Compression};
 use xz2::write::XzEncoder;
 
-use crate::compression::{CompressionMethod, Level};
+use crate::{
+    compression::{CompressionMethod, Level},
+    error::ArchiveError,
+};
 
 macro_rules! compress_flate {
     ( $encoder:expr, $hasher:expr, $reader:expr) => {{
@@ -70,7 +73,7 @@ pub fn compress<'a, R, W>(
     reader: &'a mut R,
     hasher: &'a mut Hasher,
     compression_level: Level,
-) -> Result<usize, std::io::Error>
+) -> Result<usize, ArchiveError>
 where
     R: Read,
     W: Write,
@@ -117,13 +120,13 @@ where
         Ok(total_read)
         }*/
         CompressionMethod::Zstd() => {
-            let zstd_compression_level: i32 = match compression_level {
-                Level::Fastest => todo!(),
-                Level::Best => todo!(),
-                Level::Default => zstd::DEFAULT_COMPRESSION_LEVEL,
-                Level::None => todo!(),
-                Level::Precise(_) => todo!(),
-            };
+            let zstd_compression_level = match compression_level {
+                Level::Fastest => Ok(1),
+                Level::Best => Ok(22),
+                Level::Default => Ok(zstd::DEFAULT_COMPRESSION_LEVEL),
+                Level::None => Err(ArchiveError::UnsuportedCompressionLevel(compressor)),
+                Level::Precise(val) => Ok(val as i32),
+            }?;
 
             let mut encoder = zstd::stream::write::Encoder::new(writer, zstd_compression_level)?;
             let total_read = compress_flate!(encoder, hasher, reader);
@@ -138,9 +141,7 @@ where
 
             Ok(total_read)
         }
-        CompressionMethod::Unknown(compression_method) => {
-            panic!("unsupported compression method {:?}", compression_method)
-        }
+
         _ => {
             panic!("unsupported compression method {:?}", compressor)
         }
@@ -204,6 +205,16 @@ mod test {
         let temp = writer.retrieve_writer();
         println!("compress len {:?}", temp.len());
         println!("{:X?}", temp);
+    }
+
+    #[test]
+    fn test_zstd_level() {
+        let range = zstd::compression_level_range();
+        println!("range: {:?}", range);
+
+        let default = zstd::DEFAULT_COMPRESSION_LEVEL;
+
+        println!("range min : {:?}", default);
     }
 }
 

@@ -74,18 +74,18 @@ impl fmt::Display for ArchiveFileEntry {
             "general purpose bit flag:", self.general_purpose_flags
         )?;
 
-        let compressor = CompressionMethod::from_compression_method(self.compression_method);
-        let label = if compressor.is_unknown() {
-            let str_val = self.compression_method.to_string();
+        let label = match CompressionMethod::from_compression_method(self.compression_method) {
+            Ok(compressor) => compressor.label().to_owned(),
+            Err(_) => {
+                let str_val = self.compression_method.to_string();
 
-            let mut val = String::from(compressor.label());
-            val.push_str(" (");
-            val.push_str(&str_val);
-            val.push(')');
-            val
-        } else {
-            compressor.label().to_owned()
+                let mut val = String::from("unknown (");
+                val.push_str(&str_val);
+                val.push(')');
+                val
+            }
         };
+
         writeln!(f, "{: <padding$}{}", "compression method:", label)?;
 
         let extended_local_header = if self.is_encrypted() {

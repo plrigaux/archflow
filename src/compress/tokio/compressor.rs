@@ -107,9 +107,6 @@ where
 
             Ok(total_read)
         }
-        CompressionMethod::Unknown(compression_method) => {
-            panic!("unsupported compression method {:?}", compression_method)
-        }
     }
 }
 

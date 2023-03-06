@@ -11,6 +11,7 @@ use crate::constants::CENTRAL_DIRECTORY_ENTRY_SIGNATURE;
 use crate::constants::END_OF_CENTRAL_DIRECTORY_SIZE;
 use crate::constants::FILE_HEADER_BASE_SIZE;
 use crate::constants::LOCAL_FILE_HEADER_SIGNATURE;
+use crate::error::ArchiveError;
 use crate::types::ArchiveFileEntry;
 
 pub trait ZipArchiveCommon {
@@ -198,7 +199,7 @@ impl ArchiveDescriptor {
         &self.buffer
     }
 
-    pub fn read_file_descriptor(stream: &[u8]) -> ArchiveFileEntry {
+    pub fn read_file_descriptor(stream: &[u8]) -> Result<ArchiveFileEntry, ArchiveError> {
         let mut indexer = ArchiveDescriptorReader::new();
 
         let _signature = indexer.read_u32(stream);
@@ -216,7 +217,7 @@ impl ArchiveDescriptor {
 
         let file_name_as_bytes = file_name.as_bytes().to_owned();
 
-        ArchiveFileEntry {
+        let archive_file_entry = ArchiveFileEntry {
             version_needed,
             general_purpose_flags,
             last_mod_file_time: time,
@@ -230,8 +231,10 @@ impl ArchiveDescriptor {
             offset: 0,
 
             compression_method,
-            compressor: CompressionMethod::from_compression_method(compression_method),
-        }
+            compressor: CompressionMethod::from_compression_method(compression_method)?,
+        };
+
+        Ok(archive_file_entry)
     }
 
     pub fn clear(&mut self) {
@@ -396,7 +399,7 @@ fn test_mem_dump3() {
         0x66, 0x69, 0x6c, 0x65, 0x31, 0x2e, 0x74, 0x78, 0x74, 0x78, 0x9c, 0xec, 0xcd, 0x39, 0x11,
         0x00, 0x20, 0x0c,
     ];
-    let entry = ArchiveDescriptor::read_file_descriptor(&vec);
+    let entry = ArchiveDescriptor::read_file_descriptor(&vec).unwrap();
 
     println!("{:#?}", entry);
 
@@ -420,7 +423,7 @@ fn test_mem_dump_cur_lib_sf() {
         0x06, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x41, 0x00, 0x00, 0x00, 0x61, 0x00,
         0x00, 0x00, 0x00, 0x00,
     ];
-    let entry = ArchiveDescriptor::read_file_descriptor(&vec);
+    let entry = ArchiveDescriptor::read_file_descriptor(&vec).unwrap();
 
     println!("{:#?}", entry);
 
@@ -443,7 +446,7 @@ fn test_mem_dump_rust_zip_lib_sf() {
         0x50, 0x4b, 0x05, 0x06, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x41, 0x00, 0x00,
         0x00, 0x55, 0x00, 0x00, 0x00, 0x00, 0x00,
     ];
-    let entry = ArchiveDescriptor::read_file_descriptor(&vec);
+    let entry = ArchiveDescriptor::read_file_descriptor(&vec).unwrap();
 
     println!("{:#?}", entry);
 

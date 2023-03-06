@@ -1,5 +1,7 @@
 use std::fmt::Display;
 
+use crate::error::ArchiveError;
+
 pub const STORE: u16 = 0;
 pub const DEFALTE: u16 = 8;
 pub const BZIP2: u16 = 12;
@@ -15,7 +17,6 @@ pub enum CompressionMethod {
     Lzma(),
     Zstd(),
     Xz(),
-    Unknown(u16),
 }
 
 impl CompressionMethod {
@@ -27,7 +28,6 @@ impl CompressionMethod {
             CompressionMethod::Lzma() => LZMA,
             CompressionMethod::Zstd() => ZSTD,
             CompressionMethod::Xz() => XZ,
-            CompressionMethod::Unknown(compression_method) => *compression_method,
         }
     }
 
@@ -41,16 +41,20 @@ impl CompressionMethod {
         }
     }
 
-    pub fn from_compression_method(compression_method: u16) -> CompressionMethod {
+    pub fn from_compression_method(
+        compression_method: u16,
+    ) -> Result<CompressionMethod, ArchiveError> {
         // higher versions matched first
         match compression_method {
-            STORE => CompressionMethod::Store(),
-            DEFALTE => CompressionMethod::Deflate(),
-            BZIP2 => CompressionMethod::BZip2(),
-            LZMA => CompressionMethod::Lzma(),
-            ZSTD => CompressionMethod::Zstd(),
-            XZ => CompressionMethod::Xz(),
-            _ => CompressionMethod::Unknown(compression_method),
+            STORE => Ok(CompressionMethod::Store()),
+            DEFALTE => Ok(CompressionMethod::Deflate()),
+            BZIP2 => Ok(CompressionMethod::BZip2()),
+            LZMA => Ok(CompressionMethod::Lzma()),
+            ZSTD => Ok(CompressionMethod::Zstd()),
+            XZ => Ok(CompressionMethod::Xz()),
+            _ => Err(ArchiveError::UnsuportedCompressionMethod(
+                compression_method as u32,
+            )),
         }
     }
 
@@ -63,12 +67,7 @@ impl CompressionMethod {
             CompressionMethod::Lzma() => "lzma",
             CompressionMethod::Zstd() => "zstd",
             CompressionMethod::Xz() => "xz",
-            CompressionMethod::Unknown(_) => "unknown",
         }
-    }
-
-    pub fn is_unknown(&self) -> bool {
-        matches!(self, CompressionMethod::Unknown(_))
     }
 
     pub fn update_general_purpose_bit_flag(&self, flag: u16, level: Level) -> u16 {
