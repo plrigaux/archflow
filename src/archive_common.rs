@@ -100,7 +100,7 @@ pub trait ZipArchiveCommon {
         general_purpose_flags = compressor
             .update_general_purpose_bit_flag(general_purpose_flags, options.compression_level);
 
-        let version_needed = compressor.version_needed();
+        let version_needed = compressor.zip_version_needed();
         let compression_method = compressor.zip_code();
         let mut file_header =
             ArchiveDescriptor::new(FILE_HEADER_BASE_SIZE + file_name_len as usize);
@@ -309,7 +309,7 @@ mod test {
 
     #[test]
     fn test_write_file_header() {
-        let version_needed = CompressionMethod::Deflate().version_needed();
+        let version_needed = CompressionMethod::Deflate().zip_version_needed();
         let compression_method = CompressionMethod::Deflate().zip_code();
         let general_purpose_flags: u16 = 1 << 3 | 1 << 11;
         let time = 0u16;

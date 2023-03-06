@@ -31,7 +31,7 @@ impl CompressionMethod {
         }
     }
 
-    pub fn version_needed(&self) -> u16 {
+    pub fn zip_version_needed(&self) -> u16 {
         // higher versions matched first
         match self {
             CompressionMethod::Lzma() => 63,
