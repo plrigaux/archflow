@@ -5,7 +5,7 @@ use compstream::{
     compression::CompressionMethod,
 };
 mod common;
-use common::create_new_clean_file;
+use common::tokio::create_new_clean_file;
 const TEST_ID: &str = "NE";
 const FILE_TO_COMPRESS: &str = "short_text_file.txt";
 

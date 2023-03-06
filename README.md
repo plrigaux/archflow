@@ -29,3 +29,11 @@ Supported compression formats:
 ### [File system](examples/fs.rs)
 
 ### [Hyper](examples/hyper.rs)
+
+
+## Disclaimer
+
+This implementation is inspired by : 
+ - https://github.com/scotow/zipit and
+ - https://github.com/zip-rs/zip
+

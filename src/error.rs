@@ -5,7 +5,8 @@ use crate::compression::CompressionMethod;
 pub enum ArchiveError {
     IoError(std::io::Error),
     UnsuportedCompressionLevel(CompressionMethod),
-    UnsuportedCompressionMethod(u32),
+    UnsuportedCompressionMethodCode(u16),
+    UnsuportedCompressionMethod(CompressionMethod),
 }
 
 impl Display for ArchiveError {
@@ -17,8 +18,15 @@ impl Display for ArchiveError {
             ArchiveError::UnsuportedCompressionLevel(method) => {
                 write!(f, "Archive level error for method {:}", method)
             }
-            ArchiveError::UnsuportedCompressionMethod(val) => {
+            ArchiveError::UnsuportedCompressionMethodCode(val) => {
                 write!(f, "The compression method code '{:}' is not supported", val)
+            }
+            ArchiveError::UnsuportedCompressionMethod(compression_method) => {
+                write!(
+                    f,
+                    "The compression method '{:}' is not supported",
+                    compression_method
+                )
             }
         }
     }
@@ -33,11 +41,12 @@ impl Debug for ArchiveError {
             ArchiveError::UnsuportedCompressionLevel(method) => {
                 write!(f, "Archive level error for method {:?}", method)
             }
-            ArchiveError::UnsuportedCompressionMethod(val) => write!(
+            ArchiveError::UnsuportedCompressionMethodCode(val) => write!(
                 f,
                 "The compression method code '{:?}' is not supported",
                 val
             ),
+            _ => (self as &dyn Display).fmt(f),
         }
     }
 }

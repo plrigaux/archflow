@@ -52,8 +52,8 @@ impl CompressionMethod {
             LZMA => Ok(CompressionMethod::Lzma()),
             ZSTD => Ok(CompressionMethod::Zstd()),
             XZ => Ok(CompressionMethod::Xz()),
-            _ => Err(ArchiveError::UnsuportedCompressionMethod(
-                compression_method as u32,
+            _ => Err(ArchiveError::UnsuportedCompressionMethodCode(
+                compression_method,
             )),
         }
     }

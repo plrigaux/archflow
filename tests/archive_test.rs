@@ -4,7 +4,7 @@ use compstream::{
     archive::FileOptions, compress::tokio::archive::ZipArchive, compression::CompressionMethod,
 };
 mod common;
-use common::create_new_clean_file;
+use common::tokio::create_new_clean_file;
 
 const TEST_ID: &str = "1";
 const FILE_TO_COMPRESS: &str = "file1.txt";

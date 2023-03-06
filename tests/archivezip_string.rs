@@ -1,15 +1,15 @@
 use compstream::{
-    archive::FileOptions, compress::tokio::archive::ZipArchiveNoStream,
+    archive::FileOptions, compress::std::archive::ZipArchiveNoStream,
     compression::CompressionMethod,
 };
 
 mod common;
-use common::tokio::create_new_clean_file;
+use common::std::create_new_clean_file;
 const TEST_ID: &str = "str";
 const FILE_TO_COMPRESS: &str = "ex.txt";
 
-async fn compress_file(compressor: CompressionMethod, out_file_name: &str) {
-    let file = create_new_clean_file(out_file_name).await;
+fn compress_file(compressor: CompressionMethod, out_file_name: &str) {
+    let file = create_new_clean_file(out_file_name);
 
     let mut archive = ZipArchiveNoStream::new(file);
 
@@ -17,28 +17,27 @@ async fn compress_file(compressor: CompressionMethod, out_file_name: &str) {
     let options = FileOptions::default().compression_method(compressor);
     archive
         .append_file(FILE_TO_COMPRESS, &mut in_file, &options)
-        .await
         .unwrap();
 
-    archive.finalize().await.unwrap();
+    archive.finalize().unwrap();
     println!(
         "file {:?} archive size = {:?}",
         out_file_name,
         archive.get_archive_size()
     );
-    //let data = archive.finalize().await.unwrap();
+    //let data = archive.finalize().unwrap();
 }
 
-#[tokio::test]
-async fn archive_structure_compress_store() {
+#[test]
+fn archive_structure_compress_store() {
     let compressor = CompressionMethod::Store();
     let out_file_name = ["test_", TEST_ID, "_", &compressor.to_string(), ".zip"].join("");
 
-    compress_file(compressor, &out_file_name).await;
+    compress_file(compressor, &out_file_name);
 }
 
-#[tokio::test]
-async fn archive_structure_zlib_deflate_tokio() {
+#[test]
+fn archive_structure_zlib_deflate_tokio() {
     let compressor = CompressionMethod::Deflate();
     let out_file_name = [
         "test_",
@@ -50,11 +49,11 @@ async fn archive_structure_zlib_deflate_tokio() {
     ]
     .join("");
 
-    compress_file(compressor, &out_file_name).await;
+    compress_file(compressor, &out_file_name);
 }
 
-/* #[tokio::test]
-async fn archive_structure_zlib_deflate_flate2() {
+/* #[test]
+ fn archive_structure_zlib_deflate_flate2() {
     let compressor = Compressor::DeflateFate2();
     let out_file_name = [
         "test_",
@@ -66,37 +65,37 @@ async fn archive_structure_zlib_deflate_flate2() {
     ]
     .join("");
 
-    compress_file(compressor, &out_file_name).await;
+    compress_file(compressor, &out_file_name);
 }
  */
-#[tokio::test]
-async fn archive_structure_compress_bzip() {
+#[test]
+fn archive_structure_compress_bzip() {
     let compressor = CompressionMethod::BZip2();
     let out_file_name = ["test_", TEST_ID, "_", &compressor.to_string(), ".zip"].join("");
 
-    compress_file(compressor, &out_file_name).await;
+    compress_file(compressor, &out_file_name);
 }
 
-#[tokio::test]
-async fn archive_structure_compress_lzma() {
+#[test]
+fn archive_structure_compress_lzma() {
     let compressor = CompressionMethod::Lzma();
     let out_file_name = ["test_", TEST_ID, "_", &compressor.to_string(), ".zip"].join("");
 
-    compress_file(compressor, &out_file_name).await;
+    compress_file(compressor, &out_file_name);
 }
 
-#[tokio::test]
-async fn archive_structure_compress_zstd() {
+#[test]
+fn archive_structure_compress_zstd() {
     let compressor = CompressionMethod::Zstd();
     let out_file_name = ["test_", &compressor.to_string(), TEST_ID, ".zip"].join("");
 
-    compress_file(compressor, &out_file_name).await;
+    compress_file(compressor, &out_file_name);
 }
 
-#[tokio::test]
-async fn archive_structure_compress_xz() {
+#[test]
+fn archive_structure_compress_xz() {
     let compressor = CompressionMethod::Xz();
     let out_file_name = ["test_", &compressor.to_string(), TEST_ID, ".zip"].join("");
 
-    compress_file(compressor, &out_file_name).await;
+    compress_file(compressor, &out_file_name);
 }

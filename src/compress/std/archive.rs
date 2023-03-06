@@ -130,7 +130,7 @@ impl<W: Write> ZipArchive<W> {
     /// # Features
     ///
     /// Requires `tokio-async-io` feature. `futures-async-io` is also available.
-    pub async fn finalize(&mut self) -> Result<(), ArchiveError>
+    pub fn finalize(&mut self) -> Result<(), ArchiveError>
     where
         W: Write,
     {
@@ -170,7 +170,7 @@ impl<W: Write + Seek> ZipArchiveNoStream<W> {
         }
     }
 
-    pub async fn append_file<R>(
+    pub fn append_file<R>(
         &mut self,
         file_name: &str,
         reader: &mut R,
@@ -234,7 +234,7 @@ impl<W: Write + Seek> ZipArchiveNoStream<W> {
     /// # Features
     ///
     /// Requires `tokio-async-io` feature. `futures-async-io` is also available.
-    pub async fn finalize(&mut self) -> Result<(), ArchiveError>
+    pub fn finalize(&mut self) -> Result<(), ArchiveError>
     where
         W: Write,
     {

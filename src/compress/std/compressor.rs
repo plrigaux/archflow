@@ -142,9 +142,7 @@ where
             Ok(total_read)
         }
 
-        _ => {
-            panic!("unsupported compression method {:?}", compressor)
-        }
+        _ => Err(ArchiveError::UnsuportedCompressionMethod(compressor)),
     }
 }
 

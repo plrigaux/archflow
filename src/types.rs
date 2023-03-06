@@ -78,7 +78,6 @@ impl fmt::Display for ArchiveFileEntry {
             Ok(compressor) => compressor.label().to_owned(),
             Err(_) => {
                 let str_val = self.compression_method.to_string();
-
                 let mut val = String::from("unknown (");
                 val.push_str(&str_val);
                 val.push(')');
