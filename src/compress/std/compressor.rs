@@ -1,47 +1,70 @@
-use async_compression::tokio::write::{
-    BzEncoder, DeflateEncoder, LzmaEncoder, XzEncoder, ZstdEncoder,
-};
+use std::io::{Read, Write};
+
+use bzip2::write::BzEncoder;
 use crc32fast::Hasher;
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use flate2::{write::DeflateEncoder, Compression};
+use xz2::write::XzEncoder;
 
 use crate::compression::{CompressionMethod, Level};
 
-macro_rules! compress_tokio {
+macro_rules! compress_flate {
     ( $encoder:expr, $hasher:expr, $reader:expr) => {{
         let mut buf = vec![0; 4096];
         let mut total_read = 0;
 
         loop {
-            let read = $reader.read(&mut buf).await?;
+            let read = $reader.read(&mut buf)?;
             if read == 0 {
                 break;
             }
 
             total_read += read;
             $hasher.update(&buf[..read]);
-            $encoder.write_all(&buf[..read]).await?;
-            //self.sink.write_all(&buf[..read]).await?; // Payload chunk.
+            $encoder.write_all(&buf[..read])?;
         }
-        $encoder.flush().await?;
-        $encoder.shutdown().await?;
+        $encoder.flush()?;
 
         total_read
     }};
 }
 
-impl From<Level> for async_compression::Level {
+impl From<Level> for flate2::Compression {
     fn from(level: Level) -> Self {
         match level {
-            Level::Fastest => async_compression::Level::Fastest,
-            Level::Best => async_compression::Level::Best,
-            Level::Default => async_compression::Level::Default,
-            Level::Precise(val) => async_compression::Level::Precise(val),
-            Level::None => async_compression::Level::Precise(0),
+            Level::Fastest => Compression::fast(),
+            Level::Best => Compression::best(),
+            Level::Default => Compression::default(),
+            Level::Precise(val) => Compression::new(val),
+            Level::None => Compression::none(),
         }
     }
 }
 
-pub async fn compress<'a, R, W>(
+impl From<Level> for bzip2::Compression {
+    fn from(level: Level) -> Self {
+        match level {
+            Level::Fastest => bzip2::Compression::fast(),
+            Level::Best => bzip2::Compression::best(),
+            Level::Default => bzip2::Compression::default(),
+            Level::Precise(val) => bzip2::Compression::new(val),
+            Level::None => bzip2::Compression::none(),
+        }
+    }
+}
+
+impl From<Level> for u32 {
+    fn from(level: Level) -> Self {
+        match level {
+            Level::Fastest => 1,
+            Level::Best => 9,
+            Level::Default => 6,
+            Level::Precise(val) => val,
+            Level::None => 0,
+        }
+    }
+}
+
+pub fn compress<'a, R, W>(
     compressor: CompressionMethod,
     writer: &'a mut W,
     reader: &'a mut R,
@@ -49,8 +72,8 @@ pub async fn compress<'a, R, W>(
     compression_level: Level,
 ) -> Result<usize, std::io::Error>
 where
-    R: AsyncRead + Unpin,
-    W: AsyncWrite + Unpin,
+    R: Read,
+    W: Write,
 {
     match compressor {
         CompressionMethod::Store() => {
@@ -58,81 +81,84 @@ where
             let mut total_read = 0;
 
             loop {
-                let read = reader.read(&mut buf).await?;
+                let read = reader.read(&mut buf)?;
                 if read == 0 {
                     break;
                 }
 
                 total_read += read;
                 hasher.update(&buf[..read]);
-                writer.write_all(&buf[..read]).await?;
+                writer.write_all(&buf[..read])?;
             }
-            writer.flush().await?;
+            writer.flush()?;
 
             Ok(total_read)
         }
         CompressionMethod::Deflate() => {
-            let mut zencoder = DeflateEncoder::with_quality(writer, compression_level.into());
+            let mut encoder = DeflateEncoder::new(writer, compression_level.into());
 
-            let total_read = compress_tokio!(zencoder, hasher, reader);
+            let total_read = compress_flate!(encoder, hasher, reader);
 
             Ok(total_read)
         }
 
         CompressionMethod::BZip2() => {
-            let mut zencoder = BzEncoder::with_quality(writer, compression_level.into());
+            let mut encoder = BzEncoder::new(writer, compression_level.into());
 
-            let total_read = compress_tokio!(zencoder, hasher, reader);
+            let total_read = compress_flate!(encoder, hasher, reader);
 
             Ok(total_read)
-        }
+        } /*
         CompressionMethod::Lzma() => {
-            let mut zencoder = LzmaEncoder::with_quality(writer, compression_level.into());
+        let mut zencoder = LzmaEncoder::with_quality(writer, compression_level.into());
 
-            let total_read = compress_tokio!(zencoder, hasher, reader);
+        let total_read = compress_tokio!(zencoder, hasher, reader);
 
-            Ok(total_read)
-        }
+        Ok(total_read)
+        }*/
         CompressionMethod::Zstd() => {
-            let mut zencoder = ZstdEncoder::with_quality(writer, compression_level.into());
+            let zstd_compression_level: i32 = match compression_level {
+                Level::Fastest => todo!(),
+                Level::Best => todo!(),
+                Level::Default => zstd::DEFAULT_COMPRESSION_LEVEL,
+                Level::None => todo!(),
+                Level::Precise(_) => todo!(),
+            };
 
-            let total_read = compress_tokio!(zencoder, hasher, reader);
+            let mut encoder = zstd::stream::write::Encoder::new(writer, zstd_compression_level)?;
+            let total_read = compress_flate!(encoder, hasher, reader);
+            encoder.finish()?;
 
             Ok(total_read)
         }
         CompressionMethod::Xz() => {
-            let mut zencoder = XzEncoder::with_quality(writer, compression_level.into());
+            let mut zencoder = XzEncoder::new(writer, compression_level.into());
 
-            let total_read = compress_tokio!(zencoder, hasher, reader);
+            let total_read = compress_flate!(zencoder, hasher, reader);
 
             Ok(total_read)
         }
         CompressionMethod::Unknown(compression_method) => {
             panic!("unsupported compression method {:?}", compression_method)
         }
+        _ => {
+            panic!("unsupported compression method {:?}", compressor)
+        }
     }
 }
 
 #[cfg(test)]
 mod test {
-    use crate::compress::tokio::async_wrapper::AsyncWriteWrapper;
+    use crate::compress::std::write_wrapper::WriteWrapper;
     use crate::compression::Level;
 
     use super::*;
-    use async_compression::tokio::write::ZlibEncoder;
-    use flate2::write::DeflateEncoder as DeflateEncoderFlate2;
+
     use flate2::write::ZlibEncoder as ZlibEncoderFlate;
     use std::io::Write;
-    #[tokio::test]
-    async fn test_defate_basic() {
+    #[test]
+    fn test_defate_basic() {
         let x = b"example";
-        let mut e = ZlibEncoder::new(Vec::new());
-        e.write_all(x).await.unwrap();
-        e.flush().await.unwrap();
-        e.shutdown().await.unwrap();
-        let temp = e.into_inner();
-        println!("compress len {:?}", temp.len());
-        println!("{:02X?}", temp);
 
         // [0x74, 78 9C 4A AD 48 CC 2D C8 49 05 00 00 00 FF FF 03 00 0B C0 02 ED]
 
@@ -154,32 +180,17 @@ mod test {
         // [120, 1, 0, 7, 0, 248, 255, 101, 120, 97, 109, 112, 108, 101, 0, 0, 0, 255, 255, 3, 0, 11, 192, 2, 237]
         // import zlib; print(zlib.decompress(bytes([120, 1, 0, 7, 0, 248, 255, 101, 120, 97, 109, 112, 108, 101, 0, 0, 0, 255, 255, 3, 0, 11, 192, 2, 237])))
         // prints b'example`
-
-        let mut encoder = DeflateEncoder::new(Vec::new());
-        encoder.write_all(x).await.unwrap();
-        encoder.flush().await.unwrap();
-        encoder.shutdown().await.unwrap();
-        let temp = encoder.into_inner();
-        println!("compress len {:?}", temp.len());
-        println!("{:02X?}", temp);
-
-        let mut encoder = DeflateEncoderFlate2::new(Vec::new(), flate2::Compression::default());
-        encoder.write_all(x).unwrap();
-        encoder.flush().unwrap();
-        let temp = encoder.finish().unwrap();
-        println!("compress len {:?}", temp.len());
-        println!("{:02X?}", temp);
     }
 
-    #[tokio::test]
-    async fn test_defate_compressor() {
+    #[test]
+    fn test_defate_compressor() {
         let x = b"example";
 
         let compressor = CompressionMethod::Deflate();
         let mut hasher = Hasher::new();
 
         //let a: AsyncRead = &x;
-        let mut writer = AsyncWriteWrapper::new(Vec::new());
+        let mut writer = WriteWrapper::new(Vec::new());
 
         compress(
             compressor,
@@ -188,7 +199,6 @@ mod test {
             &mut hasher,
             Level::Default,
         )
-        .await
         .unwrap();
 
         let temp = writer.retrieve_writer();

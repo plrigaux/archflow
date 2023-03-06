@@ -77,14 +77,15 @@ impl CompressionMethod {
         match self {
             CompressionMethod::Deflate() => match level {
                 Level::Fastest => flag | BIT2, //1      1    Super Fast (-es) compression option was used. //1      0    Fast (-ef) compression option was used.
-                Level::Best => flag | BIT1, // 0      1    Maximum (-exx/-ex) compression option was used.
-                Level::Default => flag,     // 0      0    Normal (-en) compression option was used.
+                Level::Best => flag | BIT1, //0      1    Maximum (-exx/-ex) compression option was used.
+                Level::Default => flag,     //0      0    Normal (-en) compression option was used.
                 Level::Precise(val) => match val {
                     1..=2 => self.update_general_purpose_bit_flag(flag, Level::Fastest),
                     6 => self.update_general_purpose_bit_flag(flag, Level::Default),
                     8.. => self.update_general_purpose_bit_flag(flag, Level::Best),
                     _ => flag,
                 },
+                Level::None => flag,
             },
 
             _ => flag,
@@ -103,6 +104,7 @@ pub enum Level {
     Fastest,
     Best,
     Default,
+    None,
     Precise(u32),
 }
 

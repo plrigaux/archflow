@@ -1,6 +1,6 @@
 use compstream::archive::FileOptions;
 use compstream::compression::CompressionMethod;
-use compstream::{tokio::archive::ZipArchive, types::FileDateTime};
+use compstream::{compress::tokio::archive::ZipArchive, types::FileDateTime};
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{header, Body, Request, Response, Server, StatusCode};
 use std::io::Cursor;

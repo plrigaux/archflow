@@ -1,5 +1,5 @@
 use compstream::{
-    archive::FileOptions, compression::CompressionMethod, tokio::archive::ZipArchive,
+    archive::FileOptions, compress::tokio::archive::ZipArchive, compression::CompressionMethod,
     types::FileDateTime,
 };
 use std::io::Cursor;

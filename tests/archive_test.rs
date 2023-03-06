@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use compstream::{
-    archive::FileOptions, compression::CompressionMethod, tokio::archive::ZipArchive,
+    archive::FileOptions, compress::tokio::archive::ZipArchive, compression::CompressionMethod,
 };
 mod common;
 use common::create_new_clean_file;
