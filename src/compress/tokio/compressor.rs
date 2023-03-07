@@ -4,7 +4,10 @@ use async_compression::tokio::write::{
 use crc32fast::Hasher;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
-use crate::compression::{CompressionMethod, Level};
+use crate::{
+    compression::{CompressionMethod, Level},
+    error::ArchiveError,
+};
 
 macro_rules! compress_tokio {
     ( $encoder:expr, $hasher:expr, $reader:expr) => {{
@@ -47,7 +50,7 @@ pub async fn compress<'a, R, W>(
     reader: &'a mut R,
     hasher: &'a mut Hasher,
     compression_level: Level,
-) -> Result<usize, std::io::Error>
+) -> Result<usize, ArchiveError>
 where
     R: AsyncRead + Unpin,
     W: AsyncWrite + Unpin,
@@ -107,6 +110,9 @@ where
 
             Ok(total_read)
         }
+        CompressionMethod::Unknown(compression_method_code) => Err(
+            ArchiveError::UnsuportedCompressionMethodCode(compression_method_code),
+        ),
     }
 }
 

@@ -17,6 +17,7 @@ pub enum CompressionMethod {
     Lzma(),
     Zstd(),
     Xz(),
+    Unknown(u16),
 }
 
 impl CompressionMethod {
@@ -28,6 +29,7 @@ impl CompressionMethod {
             CompressionMethod::Lzma() => LZMA,
             CompressionMethod::Zstd() => ZSTD,
             CompressionMethod::Xz() => XZ,
+            CompressionMethod::Unknown(comp_method_code) => *comp_method_code,
         }
     }
 
@@ -67,6 +69,7 @@ impl CompressionMethod {
             CompressionMethod::Lzma() => "lzma",
             CompressionMethod::Zstd() => "zstd",
             CompressionMethod::Xz() => "xz",
+            CompressionMethod::Unknown(_) => "unknown",
         }
     }
 

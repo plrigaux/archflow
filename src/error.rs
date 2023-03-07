@@ -7,6 +7,7 @@ pub enum ArchiveError {
     UnsuportedCompressionLevel(CompressionMethod),
     UnsuportedCompressionMethodCode(u16),
     UnsuportedCompressionMethod(CompressionMethod),
+    BadArchiveStructure(String),
 }
 
 impl Display for ArchiveError {
@@ -27,6 +28,9 @@ impl Display for ArchiveError {
                     "The compression method '{:}' is not supported",
                     compression_method
                 )
+            }
+            ArchiveError::BadArchiveStructure(detail) => {
+                write!(f, "Bad archive structure : {}", detail)
             }
         }
     }

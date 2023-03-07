@@ -6,6 +6,7 @@ use chrono::{DateTime, Datelike, Local, NaiveDate, TimeZone, Timelike, Utc};
 
 #[derive(Debug)]
 pub struct ArchiveFileEntry {
+    pub version_made_by: u16,
     pub version_needed: u16,
     pub general_purpose_flags: u16,
     pub compression_method: u16,
@@ -19,12 +20,18 @@ pub struct ArchiveFileEntry {
     pub file_name_as_bytes: Vec<u8>,
     pub offset: u32,
     pub compressor: CompressionMethod,
+    pub file_comment_length: u16,
+    pub file_disk_number: u16,
+    pub internal_file_attributes: u16,
+    pub external_file_attributes: u32,
 }
 
 impl ArchiveFileEntry {
     pub fn version_needed(&self) -> u16 {
         // higher versions matched first
         match self.compressor {
+            CompressionMethod::Lzma() => 63,
+            CompressionMethod::Zstd() => 63,
             CompressionMethod::BZip2() => 46,
             _ => 20,
         }
@@ -51,9 +58,12 @@ impl ArchiveFileEntry {
 }
 
 impl fmt::Display for ArchiveFileEntry {
-    #[allow(clippy::writeln_empty_string)]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let padding = 48;
+
+        let file_name = String::from_utf8_lossy(&self.file_name_as_bytes);
+
+        writeln!(f, "{}", file_name)?;
 
         writeln!(
             f,
@@ -111,7 +121,7 @@ impl fmt::Display for ArchiveFileEntry {
             "extended local header:", extended_local_header
         )?;
 
-        let date_time = DateTimeCS::from_msdos(self.last_mod_file_date, self.last_mod_file_date);
+        let date_time = DateTimeCS::from_msdos(self.last_mod_file_date, self.last_mod_file_time);
         writeln!(
             f,
             "{: <padding$}{}",
@@ -139,9 +149,7 @@ impl fmt::Display for ArchiveFileEntry {
             f,
             "{: <padding$}{:} characters",
             "length of filename:", self.file_name_len
-        )?;
-
-        writeln!(f, "")
+        )
     }
 }
 
