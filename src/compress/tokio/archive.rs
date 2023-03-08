@@ -86,8 +86,13 @@ impl<W: AsyncWrite + Unpin> ZipArchive<W> {
 
         let file_header_offset = self.sink.get_written_bytes_count();
 
-        let (file_header, mut archive_file_entry) =
-            self.build_file_header(file_name, options, compressor, file_header_offset as u32);
+        let (file_header, mut archive_file_entry) = self.build_file_header(
+            file_name,
+            options,
+            compressor,
+            file_header_offset as u32,
+            true,
+        );
 
         self.sink.write_all(file_header.buffer()).await?;
 
@@ -190,8 +195,13 @@ impl<W: AsyncWrite + AsyncSeek + Unpin> ZipArchiveNoStream<W> {
         let mut hasher = Hasher::new();
         let compressor = options.compressor;
 
-        let (file_header, mut archive_file_entry) =
-            self.build_file_header(file_name, options, compressor, file_header_offset as u32);
+        let (file_header, mut archive_file_entry) = self.build_file_header(
+            file_name,
+            options,
+            compressor,
+            file_header_offset as u32,
+            false,
+        );
 
         self.sink.write_all(file_header.buffer()).await?;
 

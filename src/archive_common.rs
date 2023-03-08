@@ -88,6 +88,7 @@ pub trait ZipArchiveCommon {
         options: &FileOptions,
         compressor: CompressionMethod,
         offset: u32,
+        data_descriptor: bool,
     ) -> (ArchiveDescriptor, ArchiveFileEntry) {
         let file_nameas_bytes = file_name.as_bytes();
         let file_name_as_bytes_own = file_nameas_bytes.to_owned();
@@ -101,6 +102,10 @@ pub trait ZipArchiveCommon {
 
         general_purpose_flags = compressor
             .update_general_purpose_bit_flag(general_purpose_flags, options.compression_level);
+
+        if data_descriptor {
+            general_purpose_flags |= 1 << 3; //create a data descriptor
+        }
 
         let version_needed = compressor.zip_version_needed();
         let compression_method = compressor.zip_code();

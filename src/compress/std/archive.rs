@@ -85,8 +85,13 @@ impl<W: Write> ZipArchive<W> {
 
         let file_header_offset = self.sink.get_written_bytes_count();
 
-        let (file_header, mut archive_file_entry) =
-            self.build_file_header(file_name, options, compressor, file_header_offset as u32);
+        let (file_header, mut archive_file_entry) = self.build_file_header(
+            file_name,
+            options,
+            compressor,
+            file_header_offset as u32,
+            true,
+        );
 
         self.sink.write_all(file_header.buffer())?;
 
@@ -116,6 +121,7 @@ impl<W: Write> ZipArchive<W> {
 
         self.sink.write_all(file_descriptor.buffer())?;
 
+        println!("{}", archive_file_entry);
         self.data.files_info.push(archive_file_entry);
 
         Ok(())
@@ -184,8 +190,13 @@ impl<W: Write + Seek> ZipArchiveNoStream<W> {
         let mut hasher = Hasher::new();
         let compressor = options.compressor;
 
-        let (file_header, mut archive_file_entry) =
-            self.build_file_header(file_name, options, compressor, file_header_offset as u32);
+        let (file_header, mut archive_file_entry) = self.build_file_header(
+            file_name,
+            options,
+            compressor,
+            file_header_offset as u32,
+            false,
+        );
 
         self.sink.write_all(file_header.buffer())?;
 

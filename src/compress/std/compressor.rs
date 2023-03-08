@@ -3,6 +3,7 @@ use std::io::{Read, Write};
 use bzip2::write::BzEncoder;
 use crc32fast::Hasher;
 use flate2::{write::DeflateEncoder, Compression};
+use lzma::LzmaWriter;
 use xz2::write::XzEncoder;
 
 use crate::{
@@ -111,14 +112,13 @@ where
             let total_read = compress_flate!(encoder, hasher, reader);
 
             Ok(total_read)
-        } /*
+        }
         CompressionMethod::Lzma() => {
-        let mut zencoder = LzmaEncoder::with_quality(writer, compression_level.into());
-
-        let total_read = compress_tokio!(zencoder, hasher, reader);
-
-        Ok(total_read)
-        }*/
+            match compress_lzma(writer, reader, hasher, compression_level) {
+                Ok(total_read) => Ok(total_read),
+                Err(e) => Err(ArchiveError::LZMA(e)),
+            }
+        }
         CompressionMethod::Zstd() => {
             let zstd_compression_level = match compression_level {
                 Level::Fastest => Ok(1),
@@ -144,6 +144,44 @@ where
 
         _ => Err(ArchiveError::UnsuportedCompressionMethod(compressor)),
     }
+}
+
+fn compress_lzma<'a, R, W>(
+    writer: &'a mut W,
+    reader: &'a mut R,
+    hasher: &'a mut Hasher,
+    compression_level: Level,
+) -> Result<usize, lzma::LzmaError>
+where
+    R: Read,
+    W: Write,
+{
+    let lzma_compression_level: u32 = match compression_level {
+        Level::Fastest => 1,
+        Level::Best => 9,
+        Level::Default => 6,
+        Level::None => 0,
+        Level::Precise(val) => val,
+    };
+
+    let mut encoder = LzmaWriter::new_compressor(writer, lzma_compression_level)?;
+
+    let mut buf = vec![0; 4096];
+    let mut total_read = 0;
+
+    loop {
+        let read = reader.read(&mut buf)?;
+        if read == 0 {
+            break;
+        }
+
+        total_read += read;
+        hasher.update(&buf[..read]);
+        encoder.write_all(&buf[..read])?;
+    }
+    encoder.flush()?;
+    encoder.finish()?;
+    Ok(total_read)
 }
 
 #[cfg(test)]

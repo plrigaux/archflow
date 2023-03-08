@@ -1,5 +1,7 @@
 use std::fmt::{self, Debug, Display};
 
+use lzma::LzmaError;
+
 use crate::compression::CompressionMethod;
 
 pub enum ArchiveError {
@@ -8,6 +10,7 @@ pub enum ArchiveError {
     UnsuportedCompressionMethodCode(u16),
     UnsuportedCompressionMethod(CompressionMethod),
     BadArchiveStructure(String),
+    LZMA(LzmaError),
 }
 
 impl Display for ArchiveError {
@@ -32,6 +35,7 @@ impl Display for ArchiveError {
             ArchiveError::BadArchiveStructure(detail) => {
                 write!(f, "Bad archive structure : {}", detail)
             }
+            ArchiveError::LZMA(e) => write!(f, "LZMA error : {}", e),
         }
     }
 }
@@ -50,6 +54,7 @@ impl Debug for ArchiveError {
                 "The compression method code '{:?}' is not supported",
                 val
             ),
+            ArchiveError::LZMA(e) => write!(f, "LZMA error : {:?}", e),
             _ => (self as &dyn Display).fmt(f),
         }
     }
