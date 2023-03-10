@@ -3,7 +3,8 @@ use std::io::{Read, Write};
 use bzip2::write::BzEncoder;
 use crc32fast::Hasher;
 use flate2::{write::DeflateEncoder, Compression};
-use lzma::LzmaWriter;
+use xz2::stream::{LzmaOptions, Stream};
+
 use xz2::write::XzEncoder;
 
 use crate::{
@@ -11,7 +12,7 @@ use crate::{
     error::ArchiveError,
 };
 
-macro_rules! compress_flate {
+macro_rules! compress_common {
     ( $encoder:expr, $hasher:expr, $reader:expr) => {{
         let mut buf = vec![0; 4096];
         let mut total_read = 0;
@@ -26,7 +27,7 @@ macro_rules! compress_flate {
             $hasher.update(&buf[..read]);
             $encoder.write_all(&buf[..read])?;
         }
-        $encoder.flush()?;
+        $encoder.finish()?;
 
         total_read
     }};
@@ -38,7 +39,7 @@ impl From<Level> for flate2::Compression {
             Level::Fastest => Compression::fast(),
             Level::Best => Compression::best(),
             Level::Default => Compression::default(),
-            Level::Precise(val) => Compression::new(val),
+            Level::Precise(val) => Compression::new(val as u32),
             Level::None => Compression::none(),
         }
     }
@@ -50,7 +51,7 @@ impl From<Level> for bzip2::Compression {
             Level::Fastest => bzip2::Compression::fast(),
             Level::Best => bzip2::Compression::best(),
             Level::Default => bzip2::Compression::default(),
-            Level::Precise(val) => bzip2::Compression::new(val),
+            Level::Precise(val) => bzip2::Compression::new(val as u32),
             Level::None => bzip2::Compression::none(),
         }
     }
@@ -62,7 +63,7 @@ impl From<Level> for u32 {
             Level::Fastest => 1,
             Level::Best => 9,
             Level::Default => 6,
-            Level::Precise(val) => val,
+            Level::Precise(val) => val as u32,
             Level::None => 0,
         }
     }
@@ -101,7 +102,7 @@ where
         CompressionMethod::Deflate() => {
             let mut encoder = DeflateEncoder::new(writer, compression_level.into());
 
-            let total_read = compress_flate!(encoder, hasher, reader);
+            let total_read = compress_common!(encoder, hasher, reader);
 
             Ok(total_read)
         }
@@ -109,15 +110,16 @@ where
         CompressionMethod::BZip2() => {
             let mut encoder = BzEncoder::new(writer, compression_level.into());
 
-            let total_read = compress_flate!(encoder, hasher, reader);
+            let total_read = compress_common!(encoder, hasher, reader);
 
             Ok(total_read)
         }
         CompressionMethod::Lzma() => {
-            match compress_lzma(writer, reader, hasher, compression_level) {
-                Ok(total_read) => Ok(total_read),
-                Err(e) => Err(ArchiveError::LZMA(e)),
-            }
+            let stream = compress_lzma(compression_level)?;
+            let mut encoder = XzEncoder::new_stream(writer, stream);
+
+            let total_read = compress_common!(encoder, hasher, reader);
+            Ok(total_read)
         }
         CompressionMethod::Zstd() => {
             let zstd_compression_level = match compression_level {
@@ -125,19 +127,18 @@ where
                 Level::Best => Ok(22),
                 Level::Default => Ok(zstd::DEFAULT_COMPRESSION_LEVEL),
                 Level::None => Err(ArchiveError::UnsuportedCompressionLevel(compressor)),
-                Level::Precise(val) => Ok(val as i32),
+                Level::Precise(val) => Ok(val),
             }?;
 
             let mut encoder = zstd::stream::write::Encoder::new(writer, zstd_compression_level)?;
-            let total_read = compress_flate!(encoder, hasher, reader);
-            encoder.finish()?;
+            let total_read = compress_common!(encoder, hasher, reader);
 
             Ok(total_read)
         }
         CompressionMethod::Xz() => {
-            let mut zencoder = XzEncoder::new(writer, compression_level.into());
+            let mut encoder = XzEncoder::new(writer, compression_level.into());
 
-            let total_read = compress_flate!(zencoder, hasher, reader);
+            let total_read = compress_common!(encoder, hasher, reader);
 
             Ok(total_read)
         }
@@ -146,42 +147,20 @@ where
     }
 }
 
-fn compress_lzma<'a, R, W>(
-    writer: &'a mut W,
-    reader: &'a mut R,
-    hasher: &'a mut Hasher,
-    compression_level: Level,
-) -> Result<usize, lzma::LzmaError>
-where
-    R: Read,
-    W: Write,
-{
+fn compress_lzma(compression_level: Level) -> Result<Stream, ArchiveError> {
     let lzma_compression_level: u32 = match compression_level {
         Level::Fastest => 1,
         Level::Best => 9,
         Level::Default => 6,
         Level::None => 0,
-        Level::Precise(val) => val,
+        Level::Precise(val) => val as u32,
     };
 
-    let mut encoder = LzmaWriter::new_compressor(writer, lzma_compression_level)?;
+    let options = LzmaOptions::new_preset(lzma_compression_level)?;
 
-    let mut buf = vec![0; 4096];
-    let mut total_read = 0;
+    let stream = xz2::stream::Stream::new_lzma_encoder(&options)?;
 
-    loop {
-        let read = reader.read(&mut buf)?;
-        if read == 0 {
-            break;
-        }
-
-        total_read += read;
-        hasher.update(&buf[..read]);
-        encoder.write_all(&buf[..read])?;
-    }
-    encoder.flush()?;
-    encoder.finish()?;
-    Ok(total_read)
+    Ok(stream)
 }
 
 #[cfg(test)]

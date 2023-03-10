@@ -1,7 +1,5 @@
 use std::fmt::{self, Debug, Display};
 
-use lzma::LzmaError;
-
 use crate::compression::CompressionMethod;
 
 pub enum ArchiveError {
@@ -10,7 +8,7 @@ pub enum ArchiveError {
     UnsuportedCompressionMethodCode(u16),
     UnsuportedCompressionMethod(CompressionMethod),
     BadArchiveStructure(String),
-    LZMA(LzmaError),
+    LZMA(xz2::stream::Error),
 }
 
 impl Display for ArchiveError {
@@ -63,5 +61,11 @@ impl Debug for ArchiveError {
 impl From<std::io::Error> for ArchiveError {
     fn from(value: std::io::Error) -> Self {
         ArchiveError::IoError(value)
+    }
+}
+
+impl From<xz2::stream::Error> for ArchiveError {
+    fn from(value: xz2::stream::Error) -> Self {
+        ArchiveError::LZMA(value)
     }
 }

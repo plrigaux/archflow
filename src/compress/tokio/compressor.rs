@@ -38,7 +38,7 @@ impl From<Level> for async_compression::Level {
             Level::Fastest => async_compression::Level::Fastest,
             Level::Best => async_compression::Level::Best,
             Level::Default => async_compression::Level::Default,
-            Level::Precise(val) => async_compression::Level::Precise(val),
+            Level::Precise(val) => async_compression::Level::Precise(val as u32),
             Level::None => async_compression::Level::Precise(0),
         }
     }

@@ -107,7 +107,7 @@ pub enum Level {
     Best,
     Default,
     None,
-    Precise(u32),
+    Precise(i32),
 }
 
 #[cfg(test)]
