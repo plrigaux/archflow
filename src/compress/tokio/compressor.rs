@@ -55,7 +55,13 @@ where
     R: AsyncRead + Unpin,
     W: AsyncWrite + Unpin,
 {
-    match compressor {
+    let method = if compression_level == Level::None {
+        CompressionMethod::Store()
+    } else {
+        compressor
+    };
+
+    match method {
         CompressionMethod::Store() => {
             let mut buf = vec![0; 4096];
             let mut total_read = 0;
