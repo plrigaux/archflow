@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use compstream::{
+use rill::{
     archive::FileOptions, compress::tokio::archive::ZipArchiveNoStream,
     compression::CompressionMethod,
 };

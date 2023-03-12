@@ -1,4 +1,4 @@
-use compstream::compression::CompressionMethod;
+use rill::compression::CompressionMethod;
 
 pub mod std;
 pub mod tokio;

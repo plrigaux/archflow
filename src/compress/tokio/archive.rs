@@ -2,7 +2,10 @@ use super::async_wrapper::{AsyncWriteWrapper, BytesCounter};
 use super::compressor::{self, compress};
 
 use crate::archive::FileOptions;
-use crate::archive_common::{ArchiveDescriptor, SubZipArchiveData, ZipArchiveCommon};
+use crate::archive_common::{
+    build_central_directory_end, build_central_directory_file_header, ArchiveDescriptor,
+    SubZipArchiveData, ZipArchiveCommon,
+};
 use crate::compression::Level;
 use crate::constants::{
     CENTRAL_DIRECTORY_ENTRY_BASE_SIZE, DATA_DESCRIPTOR_SIGNATURE, DESCRIPTOR_SIZE,
@@ -147,7 +150,7 @@ impl<W: AsyncWrite + Unpin> ZipArchive<W> {
             ArchiveDescriptor::new(CENTRAL_DIRECTORY_ENTRY_BASE_SIZE + 200);
 
         for file_info in &self.data.files_info {
-            self.build_central_directory_file_header(&mut central_directory_header, file_info);
+            build_central_directory_file_header(&mut central_directory_header, file_info);
 
             self.sink
                 .write_all(central_directory_header.buffer())
@@ -158,8 +161,11 @@ impl<W: AsyncWrite + Unpin> ZipArchive<W> {
 
         let current_archive_size = self.sink.get_written_bytes_count();
         let central_directory_size: u32 = current_archive_size as u32 - central_directory_offset;
-        let end_of_central_directory =
-            self.build_central_directory_end(central_directory_offset, central_directory_size);
+        let end_of_central_directory = build_central_directory_end(
+            &self.data,
+            central_directory_offset,
+            central_directory_size,
+        );
 
         self.sink
             .write_all(end_of_central_directory.buffer())
@@ -262,7 +268,7 @@ impl<W: AsyncWrite + AsyncSeek + Unpin> ZipArchiveNoStream<W> {
             ArchiveDescriptor::new(CENTRAL_DIRECTORY_ENTRY_BASE_SIZE + 200);
 
         for file_info in &self.data.files_info {
-            self.build_central_directory_file_header(&mut central_directory_header, file_info);
+            build_central_directory_file_header(&mut central_directory_header, file_info);
 
             self.sink
                 .write_all(central_directory_header.buffer())
@@ -274,8 +280,11 @@ impl<W: AsyncWrite + AsyncSeek + Unpin> ZipArchiveNoStream<W> {
         let current_archive_size = self.sink.stream_position().await?;
         let central_directory_size: u32 = current_archive_size as u32 - central_directory_offset;
 
-        let end_of_central_directory =
-            self.build_central_directory_end(central_directory_offset, central_directory_size);
+        let end_of_central_directory = build_central_directory_end(
+            &self.data,
+            central_directory_offset,
+            central_directory_size,
+        );
 
         self.sink
             .write_all(end_of_central_directory.buffer())

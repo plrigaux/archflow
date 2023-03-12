@@ -1,6 +1,6 @@
 use std::{fs::File, path::Path};
 
-use compstream::{
+use rill::{
     archive::FileOptions, compress::std::archive::ZipArchiveNoStream,
     compression::CompressionMethod, error::ArchiveError,
 };

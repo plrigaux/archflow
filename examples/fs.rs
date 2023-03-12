@@ -1,4 +1,4 @@
-use compstream::{
+use rill::{
     archive::FileOptions, compress::tokio::archive::ZipArchive, compression::CompressionMethod,
     types::FileDateTime,
 };

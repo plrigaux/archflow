@@ -1,8 +1,8 @@
-use compstream::archive::FileOptions;
-use compstream::compression::CompressionMethod;
-use compstream::{compress::tokio::archive::ZipArchive, types::FileDateTime};
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{header, Body, Request, Response, Server, StatusCode};
+use rill::archive::FileOptions;
+use rill::compression::CompressionMethod;
+use rill::{compress::tokio::archive::ZipArchive, types::FileDateTime};
 use std::io::Cursor;
 use tokio::io::duplex;
 use tokio_util::io::ReaderStream;

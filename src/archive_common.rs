@@ -24,64 +24,6 @@ pub trait ZipArchiveCommon {
         self.get_mut_data().set_archive_comment(comment);
     }
 
-    fn build_central_directory_file_header(
-        &self,
-        central_directory_header: &mut ArchiveDescriptor,
-        file_info: &ArchiveFileEntry,
-    ) {
-        central_directory_header.write_u32(CENTRAL_DIRECTORY_ENTRY_SIGNATURE); // Central directory entry signature.
-        central_directory_header.write_u16(file_info.version_made_by()); // Version made by.
-        central_directory_header.write_u16(file_info.version_needed()); // Version needed to extract.
-        central_directory_header.write_u16(file_info.general_purpose_flags); // General purpose flag (temporary crc and sizes + UTF-8 filename).
-        central_directory_header.write_u16(file_info.compression_method); // Compression method .
-        central_directory_header.write_u16(file_info.last_mod_file_time); // Modification time.
-        central_directory_header.write_u16(file_info.last_mod_file_date); // Modification date.
-        central_directory_header.write_u32(file_info.crc32); // CRC32.
-        central_directory_header.write_u32(file_info.compressed_size); // Compressed size.
-        central_directory_header.write_u32(file_info.uncompressed_size); // Uncompressed size.
-        central_directory_header.write_u16(file_info.file_name_len); // Filename length.
-        central_directory_header.write_u16(0u16); // Extra field length.
-        central_directory_header.write_u16(0u16); // File comment length.
-        central_directory_header.write_u16(0u16); // File's Disk number.
-        central_directory_header.write_u16(0u16); // Internal file attributes.
-        central_directory_header.write_u32((0o100644 << 16) as u32); // External file attributes (regular file / rw-r--r--).
-        central_directory_header.write_u32(file_info.offset); // Offset from start of file to local file header.
-        central_directory_header.write_bytes(&file_info.file_name_as_bytes); // Filename.
-    }
-
-    fn build_central_directory_end(
-        &self,
-
-        central_directory_offset: u32,
-        central_directory_size: u32,
-    ) -> ArchiveDescriptor {
-        let data: &SubZipArchiveData = self.get_data();
-        let dir_end = CentralDirectoryEnd {
-            disk_number: 0,
-            disk_with_central_directory: 0,
-            total_number_of_entries_on_this_disk: data.files_info.len() as u16,
-            total_number_of_entries: data.files_info.len() as u16,
-            central_directory_size,
-            offset_of_start_of_central_directory: central_directory_offset,
-            zip_file_comment_length: data.archive_comment.len() as u16,
-        };
-
-        let mut end_of_central_directory = ArchiveDescriptor::new(END_OF_CENTRAL_DIRECTORY_SIZE);
-        end_of_central_directory.write_u32(CENTRAL_DIRECTORY_END_SIGNATURE);
-        end_of_central_directory.write_u16(dir_end.disk_number);
-        end_of_central_directory.write_u16(dir_end.disk_with_central_directory);
-        end_of_central_directory.write_u16(dir_end.total_number_of_entries_on_this_disk);
-        end_of_central_directory.write_u16(dir_end.total_number_of_entries);
-        end_of_central_directory.write_u32(dir_end.central_directory_size);
-        end_of_central_directory.write_u32(dir_end.offset_of_start_of_central_directory);
-        end_of_central_directory.write_u16(dir_end.zip_file_comment_length);
-
-        if dir_end.zip_file_comment_length > 0 {
-            end_of_central_directory.write_bytes(&data.archive_comment);
-        }
-        end_of_central_directory
-    }
-
     fn build_file_header(
         &mut self,
         file_name: &str,
@@ -146,6 +88,61 @@ pub trait ZipArchiveCommon {
 
         (file_header, archive_file_entry)
     }
+}
+
+pub fn build_central_directory_file_header(
+    central_directory_header: &mut ArchiveDescriptor,
+    file_info: &ArchiveFileEntry,
+) {
+    central_directory_header.write_u32(CENTRAL_DIRECTORY_ENTRY_SIGNATURE); // Central directory entry signature.
+    central_directory_header.write_u16(file_info.version_made_by()); // Version made by.
+    central_directory_header.write_u16(file_info.version_needed()); // Version needed to extract.
+    central_directory_header.write_u16(file_info.general_purpose_flags); // General purpose flag (temporary crc and sizes + UTF-8 filename).
+    central_directory_header.write_u16(file_info.compression_method); // Compression method .
+    central_directory_header.write_u16(file_info.last_mod_file_time); // Modification time.
+    central_directory_header.write_u16(file_info.last_mod_file_date); // Modification date.
+    central_directory_header.write_u32(file_info.crc32); // CRC32.
+    central_directory_header.write_u32(file_info.compressed_size); // Compressed size.
+    central_directory_header.write_u32(file_info.uncompressed_size); // Uncompressed size.
+    central_directory_header.write_u16(file_info.file_name_len); // Filename length.
+    central_directory_header.write_u16(0u16); // Extra field length.
+    central_directory_header.write_u16(0u16); // File comment length.
+    central_directory_header.write_u16(0u16); // File's Disk number.
+    central_directory_header.write_u16(0u16); // Internal file attributes.
+    central_directory_header.write_u32((0o100644 << 16) as u32); // External file attributes (regular file / rw-r--r--).
+    central_directory_header.write_u32(file_info.offset); // Offset from start of file to local file header.
+    central_directory_header.write_bytes(&file_info.file_name_as_bytes); // Filename.
+}
+
+pub fn build_central_directory_end(
+    data: &SubZipArchiveData,
+    central_directory_offset: u32,
+    central_directory_size: u32,
+) -> ArchiveDescriptor {
+    let dir_end = CentralDirectoryEnd {
+        disk_number: 0,
+        disk_with_central_directory: 0,
+        total_number_of_entries_on_this_disk: data.files_info.len() as u16,
+        total_number_of_entries: data.files_info.len() as u16,
+        central_directory_size,
+        offset_of_start_of_central_directory: central_directory_offset,
+        zip_file_comment_length: data.archive_comment.len() as u16,
+    };
+
+    let mut end_of_central_directory = ArchiveDescriptor::new(END_OF_CENTRAL_DIRECTORY_SIZE);
+    end_of_central_directory.write_u32(CENTRAL_DIRECTORY_END_SIGNATURE);
+    end_of_central_directory.write_u16(dir_end.disk_number);
+    end_of_central_directory.write_u16(dir_end.disk_with_central_directory);
+    end_of_central_directory.write_u16(dir_end.total_number_of_entries_on_this_disk);
+    end_of_central_directory.write_u16(dir_end.total_number_of_entries);
+    end_of_central_directory.write_u32(dir_end.central_directory_size);
+    end_of_central_directory.write_u32(dir_end.offset_of_start_of_central_directory);
+    end_of_central_directory.write_u16(dir_end.zip_file_comment_length);
+
+    if dir_end.zip_file_comment_length > 0 {
+        end_of_central_directory.write_bytes(&data.archive_comment);
+    }
+    end_of_central_directory
 }
 
 #[derive(Debug, Default)]

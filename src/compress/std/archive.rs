@@ -2,13 +2,17 @@ use super::compressor::{self, compress};
 use super::write_wrapper::{BytesCounter, WriteSeekWrapper, WriteWrapper};
 
 use crate::archive::FileOptions;
-use crate::archive_common::{ArchiveDescriptor, SubZipArchiveData, ZipArchiveCommon};
+use crate::archive_common::{
+    build_central_directory_end, build_central_directory_file_header, ArchiveDescriptor,
+    SubZipArchiveData, ZipArchiveCommon,
+};
 use crate::compression::Level;
 use crate::constants::{
     CENTRAL_DIRECTORY_ENTRY_BASE_SIZE, DATA_DESCRIPTOR_SIGNATURE, DESCRIPTOR_SIZE,
     FILE_HEADER_CRC_OFFSET,
 };
 use crate::error::ArchiveError;
+use crate::types::ArchiveFileEntry;
 
 use crc32fast::Hasher;
 
@@ -18,17 +22,19 @@ use std::io::{Read, Seek, SeekFrom, Write};
 pub struct ZipArchive<W: Write> {
     sink: WriteWrapper<W>,
     data: SubZipArchiveData,
+    archive_size: u64,
 }
 
 #[derive(Debug)]
 pub struct ZipArchiveNoStream<W: Write + Seek> {
     sink: WriteSeekWrapper<W>,
     data: SubZipArchiveData,
+    archive_size: u64,
 }
 
 impl<W: Write> ZipArchiveCommon for ZipArchive<W> {
     fn get_archive_size(&self) -> u64 {
-        (self as &ZipArchive<W>).get_archive_size()
+        self.archive_size
     }
 
     fn get_mut_data(&mut self) -> &mut SubZipArchiveData {
@@ -47,11 +53,12 @@ impl<W: Write> ZipArchive<W> {
         Self {
             sink: WriteWrapper::new(sink_),
             data: SubZipArchiveData::default(),
+            archive_size: 0,
         }
     }
 
-    pub fn get_archive_size(&self) -> u64 {
-        self.sink.get_written_bytes_count()
+    pub fn get_archive_size(&mut self) -> Result<u64, ArchiveError> {
+        Ok(self.sink.get_written_bytes_count()?)
     }
 
     pub fn retrieve_writer(self) -> W {
@@ -82,7 +89,7 @@ impl<W: Write> ZipArchive<W> {
     {
         let compressor = options.compressor;
 
-        let file_header_offset = self.sink.get_written_bytes_count();
+        let file_header_offset = self.archive_size;
 
         let (file_header, mut archive_file_entry) = self.build_file_header(
             file_name,
@@ -95,7 +102,7 @@ impl<W: Write> ZipArchive<W> {
         self.sink.write_all(file_header.buffer())?;
 
         let mut hasher = Hasher::new();
-        let cur_size = self.sink.get_written_bytes_count();
+        let cur_size = self.sink.get_written_bytes_count()?;
 
         let uncompressed_size = compressor::compress(
             compressor,
@@ -105,7 +112,8 @@ impl<W: Write> ZipArchive<W> {
             options.compression_level,
         )?;
 
-        let compressed_size = self.sink.get_written_bytes_count() - cur_size;
+        let stream_position = self.sink.get_written_bytes_count()?;
+        let compressed_size = stream_position - cur_size;
         let crc32 = hasher.finalize();
 
         archive_file_entry.crc32 = crc32;
@@ -122,7 +130,7 @@ impl<W: Write> ZipArchive<W> {
 
         println!("{}", archive_file_entry);
         self.data.files_info.push(archive_file_entry);
-
+        self.archive_size = self.sink.get_written_bytes_count()?;
         Ok(())
     }
 
@@ -139,28 +147,8 @@ impl<W: Write> ZipArchive<W> {
     where
         W: Write,
     {
-        let central_directory_offset = self.sink.get_written_bytes_count() as u32;
+        finalize_std_comon(&mut self.sink, &self.data, &self.data.files_info)?;
 
-        let mut central_directory_header =
-            ArchiveDescriptor::new(CENTRAL_DIRECTORY_ENTRY_BASE_SIZE + 200);
-
-        for file_info in &self.data.files_info {
-            self.build_central_directory_file_header(&mut central_directory_header, file_info);
-
-            self.sink.write_all(central_directory_header.buffer())?;
-
-            central_directory_header.clear();
-        }
-
-        let current_archive_size = self.sink.get_written_bytes_count();
-        let central_directory_size: u32 = current_archive_size as u32 - central_directory_offset;
-        let end_of_central_directory =
-            self.build_central_directory_end(central_directory_offset, central_directory_size);
-
-        self.sink.write_all(end_of_central_directory.buffer())?;
-
-        BytesCounter::flush(&mut self.sink)?;
-        //println!("CentralDirectoryEnd {:#?}", dir_end);
         Ok(())
     }
 }
@@ -171,6 +159,7 @@ impl<W: Write + Seek> ZipArchiveNoStream<W> {
         Self {
             sink: WriteSeekWrapper::new(sink),
             data: SubZipArchiveData::default(),
+            archive_size: 0,
         }
     }
 
@@ -184,7 +173,7 @@ impl<W: Write + Seek> ZipArchiveNoStream<W> {
         W: Write + Seek,
         R: Read,
     {
-        let file_header_offset = self.get_archive_size();
+        let file_header_offset = self.archive_size;
         let mut hasher = Hasher::new();
         let compressor = options.compressor;
 
@@ -222,17 +211,16 @@ impl<W: Write + Seek> ZipArchiveNoStream<W> {
         file_data.write_u32(compressed_size as u32);
         file_data.write_u32(uncompressed_size);
 
-        BytesCounter::seek(
-            &mut self.sink,
-            SeekFrom::Start(file_header_offset + FILE_HEADER_CRC_OFFSET),
-        )?;
+        self.sink
+            .seek(SeekFrom::Start(file_header_offset + FILE_HEADER_CRC_OFFSET))?;
 
         self.sink.write_all(file_data.buffer())?;
 
-        BytesCounter::seek(&mut self.sink, SeekFrom::Start(archive_size))?;
+        self.sink.seek(SeekFrom::Start(archive_size))?;
 
         self.data.files_info.push(archive_file_entry);
 
+        self.archive_size = self.sink.get_written_bytes_count()?;
         Ok(())
     }
 
@@ -249,35 +237,49 @@ impl<W: Write + Seek> ZipArchiveNoStream<W> {
     where
         W: Write,
     {
-        let central_directory_offset = self.sink.stream_position()? as u32;
+        self.archive_size = finalize_std_comon(&mut self.sink, &self.data, &self.data.files_info)?;
 
-        let mut central_directory_header =
-            ArchiveDescriptor::new(CENTRAL_DIRECTORY_ENTRY_BASE_SIZE + 200);
-
-        for file_info in &self.data.files_info {
-            self.build_central_directory_file_header(&mut central_directory_header, file_info);
-
-            self.sink.write_all(central_directory_header.buffer())?;
-
-            central_directory_header.clear();
-        }
-
-        let current_archive_size = self.sink.stream_position()?;
-        let central_directory_size: u32 = current_archive_size as u32 - central_directory_offset;
-
-        let end_of_central_directory =
-            self.build_central_directory_end(central_directory_offset, central_directory_size);
-
-        self.sink.write_all(end_of_central_directory.buffer())?;
-
-        BytesCounter::flush(&mut self.sink)?;
-        self.sink.stream_position()?;
         Ok(())
     }
 
-    pub fn get_archive_size(&self) -> u64 {
-        self.sink.get_written_bytes_count()
+    pub fn get_archive_size(&mut self) -> Result<u64, ArchiveError> {
+        Ok(self.sink.get_written_bytes_count()?)
     }
+}
+
+fn finalize_std_comon<T>(
+    sink: &mut T,
+    data: &SubZipArchiveData,
+    files_info: &Vec<ArchiveFileEntry>,
+) -> Result<u64, ArchiveError>
+where
+    T: BytesCounter + Write,
+{
+    let central_directory_offset = sink.get_written_bytes_count()? as u32;
+
+    let mut central_directory_header =
+        ArchiveDescriptor::new(CENTRAL_DIRECTORY_ENTRY_BASE_SIZE + 200);
+
+    for file_info in files_info {
+        build_central_directory_file_header(&mut central_directory_header, file_info);
+
+        sink.write_all(central_directory_header.buffer())?;
+        central_directory_header.clear();
+    }
+
+    let current_archive_size = sink.get_written_bytes_count()?;
+    let central_directory_size: u32 = current_archive_size as u32 - central_directory_offset;
+
+    let end_of_central_directory =
+        build_central_directory_end(data, central_directory_offset, central_directory_size);
+
+    sink.write_all(end_of_central_directory.buffer())?;
+
+    sink.flush()?;
+
+    let archive_size = sink.get_written_bytes_count()?;
+
+    Ok(archive_size)
 }
 
 impl<W: Write + Seek> ZipArchiveCommon for ZipArchiveNoStream<W> {
@@ -290,6 +292,6 @@ impl<W: Write + Seek> ZipArchiveCommon for ZipArchiveNoStream<W> {
     }
 
     fn get_archive_size(&self) -> u64 {
-        (self as &ZipArchiveNoStream<W>).get_archive_size()
+        self.archive_size
     }
 }

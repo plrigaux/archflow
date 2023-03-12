@@ -1,15 +1,15 @@
 [package]
-name = "compstream"
+name = "rill"
 version = "0.0.1"
 edition = "2021"
 license = "MIT"
 readme = "README.md"
-description = "Create and stream a Zip archive"
-categories = ["compression", "asynchronous", "web-programming"]
+description = "Create a streamable Zip archive"
+categories = ["compression", "asynchronous", "archive"]
 keywords = ["io", "async", "non-blocking", "zip", "archive", "tokio"]
 
 [lib]
-name = "compstream"
+name = "rill"
 path = "src/lib.rs"
 
 
@@ -40,3 +40,4 @@ path = "examples/hyper.rs"
 default = ["tokio", "std"]
 std = ["dep:flate2", "dep:zstd", "dep:xz2", "dep:bzip2"]
 tokio = ["dep:async-compression"]
+

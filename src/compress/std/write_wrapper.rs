@@ -1,4 +1,4 @@
-use std::io::{Seek, Write};
+use std::io::{Error, Seek, Write};
 
 #[derive(Debug)]
 pub struct WriteWrapper<W: Write> {
@@ -7,11 +7,11 @@ pub struct WriteWrapper<W: Write> {
 }
 
 pub trait BytesCounter {
-    fn get_written_bytes_count(&self) -> u64;
+    fn get_written_bytes_count(&mut self) -> Result<u64, Error>;
     fn set_written_bytes_count(&mut self, count: u64);
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize>;
-    fn flush(&mut self) -> std::io::Result<()>;
-    fn seek(&mut self, pos: std::io::SeekFrom) -> std::io::Result<u64>;
+    /*     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize>;
+    //fn flush(&mut self) -> std::io::Result<()>;
+    fn seek(&mut self, pos: std::io::SeekFrom) -> std::io::Result<u64>; */
 }
 
 impl<W: Write> WriteWrapper<W> {
@@ -28,25 +28,25 @@ impl<W: Write> WriteWrapper<W> {
 }
 
 impl<W: Write> BytesCounter for WriteWrapper<W> {
-    fn get_written_bytes_count(&self) -> u64 {
-        self.written_bytes_count
+    fn get_written_bytes_count(&mut self) -> Result<u64, Error> {
+        Ok(self.written_bytes_count)
     }
 
     fn set_written_bytes_count(&mut self, count: u64) {
         self.written_bytes_count = count;
     }
 
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+    /*     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         self.writer.write(buf)
-    }
+    } */
 
-    fn flush(&mut self) -> std::io::Result<()> {
-        self.writer.flush()
-    }
-
-    fn seek(&mut self, _pos: std::io::SeekFrom) -> std::io::Result<u64> {
+    /*     fn flush(&mut self) -> std::io::Result<()> {
+           self.writer.flush()
+       }
+    */
+    /*     fn seek(&mut self, _pos: std::io::SeekFrom) -> std::io::Result<u64> {
         Ok(self.written_bytes_count)
-    }
+    } */
 }
 
 impl<W: Write> Write for WriteWrapper<W> {
@@ -107,23 +107,23 @@ impl<W: Write + Seek> Seek for WriteSeekWrapper<W> {
 }
 
 impl<W: Write + Seek> BytesCounter for WriteSeekWrapper<W> {
-    fn get_written_bytes_count(&self) -> u64 {
-        self.written_bytes_count
+    fn get_written_bytes_count(&mut self) -> Result<u64, Error> {
+        WriteSeekWrapper::seek(self, std::io::SeekFrom::Current(0))
     }
 
     fn set_written_bytes_count(&mut self, count: u64) {
         self.written_bytes_count = count;
     }
 
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+    /*     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         Write::write(self, buf)
     }
 
-    fn flush(&mut self) -> std::io::Result<()> {
-        Write::flush(self)
-    }
-
+    /*     fn flush(&mut self) -> std::io::Result<()> {
+           Write::flush(self)
+       }
+    */
     fn seek(&mut self, pos: std::io::SeekFrom) -> std::io::Result<u64> {
         WriteSeekWrapper::seek(self, pos)
-    }
+    } */
 }
