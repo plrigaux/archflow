@@ -1,4 +1,7 @@
-use std::io::{Error, Seek, Write};
+use std::{
+    fmt::Debug,
+    io::{Error, Seek, Write},
+};
 
 #[derive(Debug)]
 pub struct WriteWrapper<W: Write> {
@@ -6,9 +9,30 @@ pub struct WriteWrapper<W: Write> {
     written_bytes_count: u64,
 }
 
-pub trait BytesCounter {
+#[derive(Debug)]
+pub struct WriteSeekWrapper<WS: Write + Seek> {
+    writer: WS,
+    written_bytes_count: u64,
+}
+
+pub trait CommonWrapper<W: Write>: Write + Seek {
     fn get_written_bytes_count(&mut self) -> Result<u64, Error>;
     fn set_written_bytes_count(&mut self, count: u64);
+    fn get_into(self) -> W;
+}
+
+impl<W: Write> CommonWrapper<W> for WriteWrapper<W> {
+    fn get_written_bytes_count(&mut self) -> Result<u64, Error> {
+        Ok(self.written_bytes_count)
+    }
+
+    fn set_written_bytes_count(&mut self, count: u64) {
+        self.written_bytes_count = count;
+    }
+
+    fn get_into(self) -> W {
+        self.writer
+    }
 }
 
 impl<W: Write> WriteWrapper<W> {
@@ -21,16 +45,6 @@ impl<W: Write> WriteWrapper<W> {
 
     pub fn get_into(self) -> W {
         self.writer
-    }
-}
-
-impl<W: Write> BytesCounter for WriteWrapper<W> {
-    fn get_written_bytes_count(&mut self) -> Result<u64, Error> {
-        Ok(self.written_bytes_count)
-    }
-
-    fn set_written_bytes_count(&mut self, count: u64) {
-        self.written_bytes_count = count;
     }
 }
 
@@ -54,12 +68,6 @@ impl<W: Write> Write for WriteWrapper<W> {
     fn flush(&mut self) -> std::io::Result<()> {
         self.writer.flush()
     }
-}
-
-#[derive(Debug)]
-pub struct WriteSeekWrapper<WS: Write + Seek> {
-    writer: WS,
-    written_bytes_count: u64,
 }
 
 impl<W: Write + Seek> WriteSeekWrapper<W> {
@@ -101,12 +109,16 @@ impl<W: Write + Seek> Seek for WriteSeekWrapper<W> {
     }
 }
 
-impl<W: Write + Seek> BytesCounter for WriteSeekWrapper<W> {
+impl<W: Write + Seek> CommonWrapper<W> for WriteSeekWrapper<W> {
     fn get_written_bytes_count(&mut self) -> Result<u64, Error> {
         WriteSeekWrapper::seek(self, std::io::SeekFrom::Current(0))
     }
 
     fn set_written_bytes_count(&mut self, count: u64) {
         self.written_bytes_count = count;
+    }
+
+    fn get_into(self) -> W {
+        self.writer
     }
 }

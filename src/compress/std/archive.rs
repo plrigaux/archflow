@@ -1,5 +1,5 @@
 use super::compressor::compress;
-use super::write_wrapper::{BytesCounter, WriteSeekWrapper, WriteWrapper};
+use super::write_wrapper::{CommonWrapper, WriteSeekWrapper, WriteWrapper};
 
 use crate::archive::FileOptions;
 use crate::archive_common::{
@@ -15,7 +15,6 @@ use crate::error::ArchiveError;
 use crc32fast::Hasher;
 use std::io::{Read, Seek, SeekFrom, Write};
 
-#[derive(Debug)]
 pub struct ZipArchive<W: Write> {
     sink: WriteWrapper<W>,
     data: SubZipArchiveData,
@@ -149,15 +148,16 @@ impl<W: Write + Seek> ZipArchiveNoStream<W> {
     }
 }
 
-fn append_file_std_common<W, R>(
-    sink: &mut W,
+fn append_file_std_common<W, R, T>(
+    sink: &mut T,
     data: &mut SubZipArchiveData,
     file_name: &str,
     reader: &mut R,
     options: &FileOptions,
 ) -> Result<(), ArchiveError>
 where
-    W: BytesCounter + Write + Seek,
+    T: CommonWrapper<W>,
+    W: Write,
     R: Read,
 {
     let file_header_offset = data.archive_size;
@@ -230,9 +230,10 @@ fn set_sizes(
     file_descriptor.write_u32(uncompressed_size as u32);
 }
 
-fn finalize_std_comon<T>(sink: &mut T, data: &SubZipArchiveData) -> Result<u64, ArchiveError>
+fn finalize_std_comon<T, W>(sink: &mut T, data: &SubZipArchiveData) -> Result<u64, ArchiveError>
 where
-    T: BytesCounter + Write,
+    T: CommonWrapper<W>,
+    W: Write,
 {
     let central_directory_offset = sink.get_written_bytes_count()? as u32;
 
