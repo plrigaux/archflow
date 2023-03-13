@@ -9,9 +9,6 @@ pub struct WriteWrapper<W: Write> {
 pub trait BytesCounter {
     fn get_written_bytes_count(&mut self) -> Result<u64, Error>;
     fn set_written_bytes_count(&mut self, count: u64);
-    /*     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize>;
-    //fn flush(&mut self) -> std::io::Result<()>;
-    fn seek(&mut self, pos: std::io::SeekFrom) -> std::io::Result<u64>; */
 }
 
 impl<W: Write> WriteWrapper<W> {
@@ -22,7 +19,7 @@ impl<W: Write> WriteWrapper<W> {
         }
     }
 
-    pub fn retrieve_writer(self) -> W {
+    pub fn get_into(self) -> W {
         self.writer
     }
 }
@@ -35,18 +32,12 @@ impl<W: Write> BytesCounter for WriteWrapper<W> {
     fn set_written_bytes_count(&mut self, count: u64) {
         self.written_bytes_count = count;
     }
+}
 
-    /*     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        self.writer.write(buf)
-    } */
-
-    /*     fn flush(&mut self) -> std::io::Result<()> {
-           self.writer.flush()
-       }
-    */
-    /*     fn seek(&mut self, _pos: std::io::SeekFrom) -> std::io::Result<u64> {
+impl<W: Write> Seek for WriteWrapper<W> {
+    fn seek(&mut self, _pos: std::io::SeekFrom) -> std::io::Result<u64> {
         Ok(self.written_bytes_count)
-    } */
+    }
 }
 
 impl<W: Write> Write for WriteWrapper<W> {
@@ -88,6 +79,10 @@ impl<W: Write + Seek> WriteSeekWrapper<W> {
             Err(e) => Err(e),
         }
     }
+
+    pub fn get_into(self) -> W {
+        self.writer
+    }
 }
 
 impl<W: Write + Seek> Write for WriteSeekWrapper<W> {
@@ -114,16 +109,4 @@ impl<W: Write + Seek> BytesCounter for WriteSeekWrapper<W> {
     fn set_written_bytes_count(&mut self, count: u64) {
         self.written_bytes_count = count;
     }
-
-    /*     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        Write::write(self, buf)
-    }
-
-    /*     fn flush(&mut self) -> std::io::Result<()> {
-           Write::flush(self)
-       }
-    */
-    fn seek(&mut self, pos: std::io::SeekFrom) -> std::io::Result<u64> {
-        WriteSeekWrapper::seek(self, pos)
-    } */
 }

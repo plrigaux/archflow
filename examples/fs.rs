@@ -10,7 +10,7 @@ async fn main() {
     let file = File::create("archive.zip").await.unwrap();
 
     let options = FileOptions::default()
-        .compression_method(CompressionMethod::Store())
+        .compression_method(CompressionMethod::Deflate())
         .last_modified_time(FileDateTime::Now);
     let mut archive = ZipArchive::new(file);
     archive

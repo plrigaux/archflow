@@ -15,7 +15,7 @@ use crate::{
 macro_rules! compress_common {
     ( $encoder:expr, $hasher:expr, $reader:expr) => {{
         let mut buf = vec![0; 4096];
-        let mut total_read = 0;
+        let mut total_read: u64 = 0;
 
         loop {
             let read = $reader.read(&mut buf)?;
@@ -23,7 +23,7 @@ macro_rules! compress_common {
                 break;
             }
 
-            total_read += read;
+            total_read += read as u64;
             $hasher.update(&buf[..read]);
             $encoder.write_all(&buf[..read])?;
         }
@@ -75,7 +75,7 @@ pub fn compress<'a, R, W>(
     reader: &'a mut R,
     hasher: &'a mut Hasher,
     compression_level: Level,
-) -> Result<usize, ArchiveError>
+) -> Result<u64, ArchiveError>
 where
     R: Read,
     W: Write,
@@ -83,7 +83,7 @@ where
     match compressor {
         CompressionMethod::Store() => {
             let mut buf = vec![0; 4096];
-            let mut total_read = 0;
+            let mut total_read: u64 = 0;
 
             loop {
                 let read = reader.read(&mut buf)?;
@@ -91,7 +91,7 @@ where
                     break;
                 }
 
-                total_read += read;
+                total_read += read as u64;
                 hasher.update(&buf[..read]);
                 writer.write_all(&buf[..read])?;
             }
@@ -217,7 +217,7 @@ mod test {
         )
         .unwrap();
 
-        let temp = writer.retrieve_writer();
+        let temp = writer.get_into();
         println!("compress len {:?}", temp.len());
         println!("{:X?}", temp);
     }

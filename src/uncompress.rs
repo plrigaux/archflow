@@ -121,8 +121,8 @@ impl<R: Read + Seek> ArchiveReader<R> {
         let last_mod_file_time = indexer.read_u16(&central_directory_buffer); // Modification time.
         let last_mod_file_date = indexer.read_u16(&central_directory_buffer); // Modification date.
         let crc32 = indexer.read_u32(&central_directory_buffer); // CRC32.
-        let compressed_size = indexer.read_u32(&central_directory_buffer); // Compressed size.
-        let uncompressed_size = indexer.read_u32(&central_directory_buffer); // Uncompressed size.
+        let compressed_size = indexer.read_u32(&central_directory_buffer) as u64; // Compressed size.
+        let uncompressed_size = indexer.read_u32(&central_directory_buffer) as u64; // Uncompressed size.
         let file_name_len = indexer.read_u16(&central_directory_buffer); // Filename length.
         let extra_field_length = indexer.read_u16(&central_directory_buffer); // Extra field length.
         let file_comment_length = indexer.read_u16(&central_directory_buffer); // File comment length.

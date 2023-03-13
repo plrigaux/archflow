@@ -12,7 +12,7 @@ use crate::{
 macro_rules! compress_tokio {
     ( $encoder:expr, $hasher:expr, $reader:expr) => {{
         let mut buf = vec![0; 4096];
-        let mut total_read = 0;
+        let mut total_read: u64 = 0;
 
         loop {
             let read = $reader.read(&mut buf).await?;
@@ -20,7 +20,7 @@ macro_rules! compress_tokio {
                 break;
             }
 
-            total_read += read;
+            total_read += read as u64;
             $hasher.update(&buf[..read]);
             $encoder.write_all(&buf[..read]).await?;
             //self.sink.write_all(&buf[..read]).await?; // Payload chunk.
@@ -50,7 +50,7 @@ pub async fn compress<'a, R, W>(
     reader: &'a mut R,
     hasher: &'a mut Hasher,
     compression_level: Level,
-) -> Result<usize, ArchiveError>
+) -> Result<u64, ArchiveError>
 where
     R: AsyncRead + Unpin,
     W: AsyncWrite + Unpin,
@@ -64,7 +64,7 @@ where
     match method {
         CompressionMethod::Store() => {
             let mut buf = vec![0; 4096];
-            let mut total_read = 0;
+            let mut total_read: u64 = 0;
 
             loop {
                 let read = reader.read(&mut buf).await?;
@@ -72,7 +72,7 @@ where
                     break;
                 }
 
-                total_read += read;
+                total_read += read as u64;
                 hasher.update(&buf[..read]);
                 writer.write_all(&buf[..read]).await?;
             }

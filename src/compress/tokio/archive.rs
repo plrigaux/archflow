@@ -3,8 +3,8 @@ use super::compressor::{self, compress};
 
 use crate::archive::FileOptions;
 use crate::archive_common::{
-    build_central_directory_end, build_central_directory_file_header, ArchiveDescriptor,
-    SubZipArchiveData, ZipArchiveCommon,
+    build_central_directory_end, build_central_directory_file_header, build_file_header,
+    ArchiveDescriptor, SubZipArchiveData, ZipArchiveCommon,
 };
 use crate::compression::Level;
 use crate::constants::{
@@ -89,7 +89,7 @@ impl<W: AsyncWrite + Unpin> ZipArchive<W> {
 
         let file_header_offset = self.sink.get_written_bytes_count();
 
-        let (file_header, mut archive_file_entry) = self.build_file_header(
+        let (file_header, mut archive_file_entry) = build_file_header(
             file_name,
             options,
             compressor,
@@ -115,8 +115,8 @@ impl<W: AsyncWrite + Unpin> ZipArchive<W> {
         let crc32 = hasher.finalize();
 
         archive_file_entry.crc32 = crc32;
-        archive_file_entry.compressed_size = compressed_size as u32;
-        archive_file_entry.uncompressed_size = uncompressed_size as u32;
+        archive_file_entry.compressed_size = compressed_size;
+        archive_file_entry.uncompressed_size = uncompressed_size;
 
         let mut file_descriptor = ArchiveDescriptor::new(DESCRIPTOR_SIZE);
         file_descriptor.write_u32(DATA_DESCRIPTOR_SIGNATURE);
@@ -201,7 +201,7 @@ impl<W: AsyncWrite + AsyncSeek + Unpin> ZipArchiveNoStream<W> {
         let mut hasher = Hasher::new();
         let compressor = options.compressor;
 
-        let (file_header, mut archive_file_entry) = self.build_file_header(
+        let (file_header, mut archive_file_entry) = build_file_header(
             file_name,
             options,
             compressor,
@@ -221,20 +221,20 @@ impl<W: AsyncWrite + AsyncSeek + Unpin> ZipArchiveNoStream<W> {
             &mut hasher,
             Level::Default,
         )
-        .await? as u32;
+        .await?;
 
         self.archive_size = self.sink.stream_position().await?;
         let compressed_size = self.archive_size - file_begin;
 
         let crc32 = hasher.finalize();
         archive_file_entry.crc32 = crc32;
-        archive_file_entry.compressed_size = compressed_size as u32;
+        archive_file_entry.compressed_size = compressed_size;
         archive_file_entry.uncompressed_size = uncompressed_size;
 
         let mut file_data = ArchiveDescriptor::new(3 * 4);
         file_data.write_u32(crc32);
         file_data.write_u32(compressed_size as u32);
-        file_data.write_u32(uncompressed_size);
+        file_data.write_u32(uncompressed_size as u32);
 
         self.sink
             .seek(SeekFrom::Start(file_header_offset + FILE_HEADER_CRC_OFFSET))

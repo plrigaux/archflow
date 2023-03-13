@@ -1,3 +1,4 @@
+use rill::error::ArchiveError;
 use rill::{
     archive::FileOptions, compress::std::archive::ZipArchiveNoStream,
     compression::CompressionMethod,
@@ -9,7 +10,7 @@ use common::std::create_new_clean_file;
 const TEST_ID: &str = "short_nostream";
 const FILE_TO_COMPRESS: &str = "ex.txt";
 
-fn compress_file(compressor: CompressionMethod, out_file_name: &str) {
+fn compress_file(compressor: CompressionMethod, out_file_name: &str) -> Result<(), ArchiveError> {
     let file = create_new_clean_file(out_file_name);
 
     let mut archive = ZipArchiveNoStream::new(file);
@@ -20,59 +21,61 @@ fn compress_file(compressor: CompressionMethod, out_file_name: &str) {
         .append_file(FILE_TO_COMPRESS, &mut in_file, &options)
         .unwrap();
 
-    archive.finalize().unwrap();
-    println!(
-        "file {:?} archive size = {:?}",
-        out_file_name,
-        archive.get_archive_size()
-    );
-    //let data = archive.finalize().unwrap();
+    let (archive_size, _outfile) = archive.finalize().unwrap();
+    println!("file {:?} archive size = {:?}", out_file_name, archive_size);
+    Ok(())
 }
 
 #[test]
-fn archive_structure_compress_store() {
+fn archive_structure_compress_store() -> Result<(), ArchiveError> {
     let compressor = CompressionMethod::Store();
     let out_file_name = out_file_name(compressor, TEST_ID);
 
-    compress_file(compressor, &out_file_name);
+    compress_file(compressor, &out_file_name)?;
+    Ok(())
 }
 
 #[test]
-fn archive_structure_zlib_deflate_tokio() {
+fn archive_structure_zlib_deflate_tokio() -> Result<(), ArchiveError> {
     let compressor = CompressionMethod::Deflate();
     let out_file_name = out_file_name(compressor, TEST_ID);
 
-    compress_file(compressor, &out_file_name);
+    compress_file(compressor, &out_file_name)?;
+    Ok(())
 }
 
 #[test]
-fn archive_structure_compress_bzip() {
+fn archive_structure_compress_bzip() -> Result<(), ArchiveError> {
     let compressor = CompressionMethod::BZip2();
     let out_file_name = out_file_name(compressor, TEST_ID);
 
-    compress_file(compressor, &out_file_name);
+    compress_file(compressor, &out_file_name)?;
+    Ok(())
 }
 
 #[test]
-fn archive_structure_compress_lzma() {
+fn archive_structure_compress_lzma() -> Result<(), ArchiveError> {
     let compressor = CompressionMethod::Lzma();
     let out_file_name = out_file_name(compressor, TEST_ID);
 
-    compress_file(compressor, &out_file_name);
+    compress_file(compressor, &out_file_name)?;
+    Ok(())
 }
 
 #[test]
-fn archive_structure_compress_zstd() {
+fn archive_structure_compress_zstd() -> Result<(), ArchiveError> {
     let compressor = CompressionMethod::Zstd();
     let out_file_name = out_file_name(compressor, TEST_ID);
 
-    compress_file(compressor, &out_file_name);
+    compress_file(compressor, &out_file_name)?;
+    Ok(())
 }
 
 #[test]
-fn archive_structure_compress_xz() {
+fn archive_structure_compress_xz() -> Result<(), ArchiveError> {
     let compressor = CompressionMethod::Xz();
     let out_file_name = out_file_name(compressor, TEST_ID);
 
-    compress_file(compressor, &out_file_name);
+    compress_file(compressor, &out_file_name)?;
+    Ok(())
 }

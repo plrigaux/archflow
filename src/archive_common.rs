@@ -23,71 +23,70 @@ pub trait ZipArchiveCommon {
     fn set_archive_comment(&mut self, comment: &str) {
         self.get_mut_data().set_archive_comment(comment);
     }
+}
 
-    fn build_file_header(
-        &mut self,
-        file_name: &str,
-        options: &FileOptions,
-        compressor: CompressionMethod,
-        offset: u32,
-        data_descriptor: bool,
-    ) -> (ArchiveDescriptor, ArchiveFileEntry) {
-        let file_nameas_bytes = file_name.as_bytes();
-        let file_name_as_bytes_own = file_nameas_bytes.to_owned();
-        let file_name_len = file_name_as_bytes_own.len() as u16;
+pub fn build_file_header(
+    file_name: &str,
+    options: &FileOptions,
+    compressor: CompressionMethod,
+    offset: u32,
+    data_descriptor: bool,
+) -> (ArchiveDescriptor, ArchiveFileEntry) {
+    let file_nameas_bytes = file_name.as_bytes();
+    let file_name_as_bytes_own = file_nameas_bytes.to_owned();
+    let file_name_len = file_name_as_bytes_own.len() as u16;
 
-        let (date, time) = options.last_modified_time.ms_dos();
-        let mut general_purpose_flags: u16 = 0;
-        if file_name_as_bytes_own.len() > file_name.len() {
-            general_purpose_flags |= 1 << 11; //set utf8 flag
-        }
-
-        general_purpose_flags = compressor
-            .update_general_purpose_bit_flag(general_purpose_flags, options.compression_level);
-
-        if data_descriptor {
-            general_purpose_flags |= 1 << 3; //create a data descriptor
-        }
-
-        let version_needed = compressor.zip_version_needed();
-        let compression_method = compressor.zip_code();
-        let mut file_header = ArchiveDescriptor::new(FILE_HEADER_BASE_SIZE + file_name_len as u64);
-        file_header.write_u32(LOCAL_FILE_HEADER_SIGNATURE);
-        file_header.write_u16(version_needed);
-        file_header.write_u16(general_purpose_flags);
-        file_header.write_u16(compression_method);
-        file_header.write_u16(time);
-        file_header.write_u16(date);
-        file_header.write_u32(0);
-        file_header.write_u32(0);
-        file_header.write_u32(0);
-        file_header.write_u16(file_name_len);
-        file_header.write_u16(0);
-        file_header.write_bytes(&file_name_as_bytes_own);
-
-        let archive_file_entry = ArchiveFileEntry {
-            version_made_by: VERSION_MADE_BY,
-            version_needed,
-            general_purpose_flags,
-            compression_method,
-            last_mod_file_time: time,
-            last_mod_file_date: date,
-            crc32: 0,
-            compressed_size: 0,
-            uncompressed_size: 0,
-            file_name_len,
-            extra_field_length: 0,
-            file_name_as_bytes: file_name.as_bytes().to_owned(),
-            offset,
-            compressor,
-            internal_file_attributes: 0,
-            external_file_attributes: 0,
-            file_comment_length: 0,
-            file_disk_number: 0,
-        };
-
-        (file_header, archive_file_entry)
+    let (date, time) = options.last_modified_time.ms_dos();
+    let mut general_purpose_flags: u16 = 0;
+    if file_name_as_bytes_own.len() > file_name.len() {
+        general_purpose_flags |= 1 << 11; //set utf8 flag
     }
+
+    general_purpose_flags = compressor
+        .update_general_purpose_bit_flag(general_purpose_flags, options.compression_level);
+
+    if data_descriptor {
+        general_purpose_flags |= 1 << 3; //create a data descriptor
+    }
+
+    let version_needed = compressor.zip_version_needed();
+    let compression_method = compressor.zip_code();
+    let mut file_header = ArchiveDescriptor::new(FILE_HEADER_BASE_SIZE + file_name_len as u64);
+    file_header.write_u32(LOCAL_FILE_HEADER_SIGNATURE);
+    file_header.write_u16(version_needed);
+    file_header.write_u16(general_purpose_flags);
+    file_header.write_u16(compression_method);
+    file_header.write_u16(time);
+    file_header.write_u16(date);
+    file_header.write_u32(0);
+    file_header.write_u32(0);
+    file_header.write_u32(0);
+    file_header.write_u16(file_name_len);
+    file_header.write_u16(0);
+    file_header.write_bytes(&file_name_as_bytes_own);
+
+    let archive_file_entry = ArchiveFileEntry {
+        version_made_by: VERSION_MADE_BY,
+        version_needed,
+        general_purpose_flags,
+        compression_method,
+        last_mod_file_time: time,
+        last_mod_file_date: date,
+        crc32: 0,
+        compressed_size: 0,
+        uncompressed_size: 0,
+        file_name_len,
+        extra_field_length: 0,
+        file_name_as_bytes: file_name.as_bytes().to_owned(),
+        offset,
+        compressor,
+        internal_file_attributes: 0,
+        external_file_attributes: 0,
+        file_comment_length: 0,
+        file_disk_number: 0,
+    };
+
+    (file_header, archive_file_entry)
 }
 
 pub fn build_central_directory_file_header(
@@ -102,8 +101,8 @@ pub fn build_central_directory_file_header(
     central_directory_header.write_u16(file_info.last_mod_file_time); // Modification time.
     central_directory_header.write_u16(file_info.last_mod_file_date); // Modification date.
     central_directory_header.write_u32(file_info.crc32); // CRC32.
-    central_directory_header.write_u32(file_info.compressed_size); // Compressed size.
-    central_directory_header.write_u32(file_info.uncompressed_size); // Uncompressed size.
+    central_directory_header.write_u32(file_info.compressed_size as u32); // Compressed size.
+    central_directory_header.write_u32(file_info.uncompressed_size as u32); // Uncompressed size.
     central_directory_header.write_u16(file_info.file_name_len); // Filename length.
     central_directory_header.write_u16(0u16); // Extra field length.
     central_directory_header.write_u16(0u16); // File comment length.
@@ -149,6 +148,8 @@ pub fn build_central_directory_end(
 pub struct SubZipArchiveData {
     pub files_info: Vec<ArchiveFileEntry>,
     archive_comment: Vec<u8>,
+    pub archive_size: u64,
+    pub data_descriptor: bool,
 }
 
 impl SubZipArchiveData {
@@ -216,8 +217,8 @@ impl ArchiveDescriptor {
         let time = indexer.read_u16(stream);
         let date = indexer.read_u16(stream);
         let crc = indexer.read_u32(stream);
-        let compressed_size = indexer.read_u32(stream);
-        let uncompressed_size = indexer.read_u32(stream);
+        let compressed_size = indexer.read_u32(stream) as u64;
+        let uncompressed_size = indexer.read_u32(stream) as u64;
         let file_name_len = indexer.read_u16(stream);
         let extra_field_length = indexer.read_u16(stream);
         let file_name = indexer.read_utf8_string(stream, file_name_len as usize);
