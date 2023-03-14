@@ -1,4 +1,4 @@
-use super::async_wrapper::{AsyncWriteWrapper, BytesCounter};
+use super::async_wrapper::{AsyncWriteWrapper, CommonWrapper};
 use super::compressor::{self, compress};
 
 use crate::archive::FileOptions;
@@ -55,8 +55,8 @@ impl<W: AsyncWrite + Unpin> ZipArchive<W> {
         }
     }
 
-    pub fn get_archive_size(&self) -> u64 {
-        self.sink.get_written_bytes_count()
+    pub fn get_archive_size(&mut self) -> u64 {
+        self.sink.get_written_bytes_count().unwrap()
     }
 
     pub fn retrieve_writer(self) -> W {
@@ -87,7 +87,7 @@ impl<W: AsyncWrite + Unpin> ZipArchive<W> {
     {
         let compressor = options.compressor;
 
-        let file_header_offset = self.sink.get_written_bytes_count();
+        let file_header_offset = self.sink.get_written_bytes_count().unwrap();
 
         let (file_header, mut archive_file_entry) = build_file_header(
             file_name,
@@ -100,7 +100,7 @@ impl<W: AsyncWrite + Unpin> ZipArchive<W> {
         self.sink.write_all(file_header.buffer()).await?;
 
         let mut hasher = Hasher::new();
-        let cur_size = self.sink.get_written_bytes_count();
+        let cur_size = self.sink.get_written_bytes_count().unwrap();
 
         let uncompressed_size = compressor::compress(
             compressor,
@@ -111,7 +111,7 @@ impl<W: AsyncWrite + Unpin> ZipArchive<W> {
         )
         .await?;
 
-        let compressed_size = self.sink.get_written_bytes_count() - cur_size;
+        let compressed_size = self.sink.get_written_bytes_count().unwrap() - cur_size;
         let crc32 = hasher.finalize();
 
         archive_file_entry.crc32 = crc32;
@@ -144,7 +144,7 @@ impl<W: AsyncWrite + Unpin> ZipArchive<W> {
     where
         W: AsyncWrite + Unpin,
     {
-        let central_directory_offset = self.sink.get_written_bytes_count() as u32;
+        let central_directory_offset = self.sink.get_written_bytes_count().unwrap() as u32;
 
         let mut central_directory_header =
             ArchiveDescriptor::new(CENTRAL_DIRECTORY_ENTRY_BASE_SIZE + 200);
@@ -159,7 +159,7 @@ impl<W: AsyncWrite + Unpin> ZipArchive<W> {
             central_directory_header.clear();
         }
 
-        let current_archive_size = self.sink.get_written_bytes_count();
+        let current_archive_size = self.sink.get_written_bytes_count().unwrap();
         let central_directory_size: u32 = current_archive_size as u32 - central_directory_offset;
         let end_of_central_directory = build_central_directory_end(
             &self.data,

@@ -217,7 +217,7 @@ mod test {
         )
         .unwrap();
 
-        let temp = writer.get_into();
+        let temp = Box::new(writer).get_into();
         println!("compress len {:?}", temp.len());
         println!("{:X?}", temp);
     }

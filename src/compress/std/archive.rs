@@ -83,13 +83,70 @@ impl<'a, W: Write + 'a> ZipArchive<'a, W> {
         W: Write,
         R: Read,
     {
-        append_file_std_common(
-            self.sink.as_mut(),
-            &mut self.data,
+        let file_header_offset = self.data.archive_size;
+        let mut hasher = Hasher::new();
+        let compressor = options.compressor;
+
+        let (file_header, mut archive_file_entry) = build_file_header(
             file_name,
-            reader,
             options,
-        )
+            compressor,
+            file_header_offset as u32,
+            self.data.data_descriptor,
+        );
+
+        self.sink.write_all(file_header.buffer())?;
+
+        let file_begin = self.sink.stream_position()?;
+
+        let uncompressed_size = compress(
+            compressor,
+            &mut self.sink,
+            reader,
+            &mut hasher,
+            Level::Default,
+        )?;
+
+        let archive_size = self.sink.stream_position()?;
+        let compressed_size = archive_size - file_begin;
+
+        let crc32 = hasher.finalize();
+        archive_file_entry.crc32 = crc32;
+        archive_file_entry.compressed_size = compressed_size;
+        archive_file_entry.uncompressed_size = uncompressed_size;
+
+        if self.data.data_descriptor {
+            let mut file_descriptor = ArchiveDescriptor::new(DESCRIPTOR_SIZE);
+            file_descriptor.write_u32(DATA_DESCRIPTOR_SIGNATURE);
+            set_sizes(
+                &mut file_descriptor,
+                crc32,
+                compressed_size,
+                uncompressed_size,
+            );
+        } else {
+            let mut file_descriptor = ArchiveDescriptor::new(3 * 4);
+            set_sizes(
+                &mut file_descriptor,
+                crc32,
+                compressed_size,
+                uncompressed_size,
+            );
+
+            //position in the the file header
+            self.sink
+                .seek(SeekFrom::Start(file_header_offset + FILE_HEADER_CRC_OFFSET))?;
+
+            self.sink.write_all(file_descriptor.buffer())?;
+
+            //position back at the end
+            self.sink.seek(SeekFrom::Start(archive_size))?;
+        }
+        self.data.files_info.push(archive_file_entry);
+
+        self.data.archive_size = self.sink.get_written_bytes_count()?;
+
+        Ok(())
     }
 
     /// Finalize the archive by writing the necessary metadata to the end of the archive.
@@ -105,81 +162,35 @@ impl<'a, W: Write + 'a> ZipArchive<'a, W> {
     where
         W: Write,
     {
-        self.data.archive_size = finalize_std_comon(self.sink.as_mut(), &self.data)?;
+        let central_directory_offset = self.sink.get_written_bytes_count()? as u32;
+
+        let mut central_directory_header =
+            ArchiveDescriptor::new(CENTRAL_DIRECTORY_ENTRY_BASE_SIZE + 200);
+
+        for file_info in &self.data.files_info {
+            build_central_directory_file_header(&mut central_directory_header, file_info);
+
+            self.sink.write_all(central_directory_header.buffer())?;
+            central_directory_header.clear();
+        }
+
+        let current_archive_size = self.sink.get_written_bytes_count()?;
+        let central_directory_size: u32 = current_archive_size as u32 - central_directory_offset;
+
+        let end_of_central_directory = build_central_directory_end(
+            &self.data,
+            central_directory_offset,
+            central_directory_size,
+        );
+
+        self.sink.write_all(end_of_central_directory.buffer())?;
+
+        self.sink.flush()?;
+
+        self.data.archive_size = self.sink.get_written_bytes_count()?;
 
         Ok(self.data.archive_size)
     }
-}
-
-fn append_file_std_common<W, R, T>(
-    sink: &mut T,
-    data: &mut SubZipArchiveData,
-    file_name: &str,
-    reader: &mut R,
-    options: &FileOptions,
-) -> Result<(), ArchiveError>
-where
-    T: CommonWrapper<W> + ?Sized,
-    W: Write,
-    R: Read,
-{
-    let file_header_offset = data.archive_size;
-    let mut hasher = Hasher::new();
-    let compressor = options.compressor;
-
-    let (file_header, mut archive_file_entry) = build_file_header(
-        file_name,
-        options,
-        compressor,
-        file_header_offset as u32,
-        data.data_descriptor,
-    );
-
-    sink.write_all(file_header.buffer())?;
-
-    let file_begin = sink.stream_position()?;
-
-    let uncompressed_size = compress(compressor, sink, reader, &mut hasher, Level::Default)?;
-
-    let archive_size = sink.stream_position()?;
-    let compressed_size = archive_size - file_begin;
-
-    let crc32 = hasher.finalize();
-    archive_file_entry.crc32 = crc32;
-    archive_file_entry.compressed_size = compressed_size;
-    archive_file_entry.uncompressed_size = uncompressed_size;
-
-    if data.data_descriptor {
-        let mut file_descriptor = ArchiveDescriptor::new(DESCRIPTOR_SIZE);
-        file_descriptor.write_u32(DATA_DESCRIPTOR_SIGNATURE);
-        set_sizes(
-            &mut file_descriptor,
-            crc32,
-            compressed_size,
-            uncompressed_size,
-        );
-    } else {
-        let mut file_descriptor = ArchiveDescriptor::new(3 * 4);
-        set_sizes(
-            &mut file_descriptor,
-            crc32,
-            compressed_size,
-            uncompressed_size,
-        );
-
-        //position in the the file header
-        sink.seek(SeekFrom::Start(file_header_offset + FILE_HEADER_CRC_OFFSET))?;
-
-        sink.write_all(file_descriptor.buffer())?;
-
-        //position back at the end
-        sink.seek(SeekFrom::Start(archive_size))?;
-    }
-    data.files_info.push(archive_file_entry);
-
-    data.archive_size = sink.get_written_bytes_count()?;
-
-    Ok(())
 }
 
 fn set_sizes(
@@ -191,36 +202,4 @@ fn set_sizes(
     file_descriptor.write_u32(crc32);
     file_descriptor.write_u32(compressed_size as u32);
     file_descriptor.write_u32(uncompressed_size as u32);
-}
-
-fn finalize_std_comon<T, W>(sink: &mut T, data: &SubZipArchiveData) -> Result<u64, ArchiveError>
-where
-    T: CommonWrapper<W> + ?Sized,
-    W: Write,
-{
-    let central_directory_offset = sink.get_written_bytes_count()? as u32;
-
-    let mut central_directory_header =
-        ArchiveDescriptor::new(CENTRAL_DIRECTORY_ENTRY_BASE_SIZE + 200);
-
-    for file_info in &data.files_info {
-        build_central_directory_file_header(&mut central_directory_header, file_info);
-
-        sink.write_all(central_directory_header.buffer())?;
-        central_directory_header.clear();
-    }
-
-    let current_archive_size = sink.get_written_bytes_count()?;
-    let central_directory_size: u32 = current_archive_size as u32 - central_directory_offset;
-
-    let end_of_central_directory =
-        build_central_directory_end(data, central_directory_offset, central_directory_size);
-
-    sink.write_all(end_of_central_directory.buffer())?;
-
-    sink.flush()?;
-
-    let archive_size = sink.get_written_bytes_count()?;
-
-    Ok(archive_size)
 }

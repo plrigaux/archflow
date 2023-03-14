@@ -18,7 +18,7 @@ pub struct WriteSeekWrapper<WS: Write + Seek> {
 pub trait CommonWrapper<W: Write + ?Sized>: Write + Seek {
     fn get_written_bytes_count(&mut self) -> Result<u64, Error>;
     fn set_written_bytes_count(&mut self, count: u64);
-    fn get_into(self) -> W;
+    fn get_into(self: Box<Self>) -> W;
 }
 
 impl<W: Write> CommonWrapper<W> for WriteWrapper<W> {
@@ -30,7 +30,7 @@ impl<W: Write> CommonWrapper<W> for WriteWrapper<W> {
         self.written_bytes_count = count;
     }
 
-    fn get_into(self) -> W {
+    fn get_into(self: Box<Self>) -> W {
         self.writer
     }
 }
@@ -43,7 +43,7 @@ impl<W: Write> WriteWrapper<W> {
         }
     }
 
-    pub fn get_into(self) -> W {
+    pub fn get_into(self: Box<Self>) -> W {
         self.writer
     }
 }
@@ -118,7 +118,7 @@ impl<W: Write + Seek> CommonWrapper<W> for WriteSeekWrapper<W> {
         self.written_bytes_count = count;
     }
 
-    fn get_into(self) -> W {
+    fn get_into(self: Box<Self>) -> W {
         self.writer
     }
 }
