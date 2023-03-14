@@ -125,6 +125,7 @@ where
 #[cfg(test)]
 mod test {
     use crate::compress::tokio::async_wrapper::AsyncWriteWrapper;
+    use crate::compress::tokio::async_wrapper::CommonWrapper;
     use crate::compression::Level;
 
     use super::*;
@@ -188,7 +189,8 @@ mod test {
         let mut hasher = Hasher::new();
 
         //let a: AsyncRead = &x;
-        let mut writer = AsyncWriteWrapper::new(Vec::new());
+        let mut writer: Box<dyn CommonWrapper<Vec<u8>>> =
+            Box::new(AsyncWriteWrapper::new(Vec::new()));
 
         compress(
             compressor,
@@ -200,7 +202,7 @@ mod test {
         .await
         .unwrap();
 
-        let temp = writer.retrieve_writer();
+        let temp = writer.get_into();
         println!("compress len {:?}", temp.len());
         println!("{:X?}", temp);
     }

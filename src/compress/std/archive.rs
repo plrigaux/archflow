@@ -3,13 +3,13 @@ use super::write_wrapper::{CommonWrapper, WriteSeekWrapper, WriteWrapper};
 
 use crate::archive::FileOptions;
 use crate::archive_common::{
-    build_central_directory_end, build_central_directory_file_header, build_file_header,
+    build_central_directory_end, build_central_directory_file_header, build_file_header, set_sizes,
     ArchiveDescriptor, SubZipArchiveData, ZipArchiveCommon,
 };
 use crate::compression::Level;
 use crate::constants::{
     CENTRAL_DIRECTORY_ENTRY_BASE_SIZE, DATA_DESCRIPTOR_SIGNATURE, DESCRIPTOR_SIZE,
-    FILE_HEADER_CRC_OFFSET,
+    EXTENDED_LOCAL_HEADER_FLAG, FILE_HEADER_CRC_OFFSET,
 };
 use crate::error::ArchiveError;
 use crc32fast::Hasher;
@@ -36,23 +36,24 @@ impl<'a, W: Write> ZipArchiveCommon for ZipArchive<'a, W> {
 
 impl<'a, W: Write + 'a> ZipArchive<'a, W> {
     /// Create a new zip archive, using the underlying `Write` to write files' header and payload.
-    pub fn new(sink_: W) -> Self {
+    /// has a extended local header:
+    pub fn new_streamable(sink_: W) -> Self {
         let mut data = SubZipArchiveData::default();
-        data.data_descriptor = true;
+        data.base_flags = EXTENDED_LOCAL_HEADER_FLAG; //extended local header
         Self {
             sink: Box::new(WriteWrapper::new(sink_)),
             data,
         }
     }
-    pub fn newseek<S: Write + Seek + 'a>(sink_: S) -> ZipArchive<'a, W>
+    pub fn new<S: Write + Seek + 'a>(sink_: S) -> ZipArchive<'a, W>
     where
         WriteSeekWrapper<S>: CommonWrapper<W>,
     {
         let data = SubZipArchiveData::default();
+        let wrapped_sink = WriteSeekWrapper::new(sink_);
 
-        let sdfas = WriteSeekWrapper::new(sink_);
         ZipArchive {
-            sink: Box::new(sdfas),
+            sink: Box::new(wrapped_sink),
             data,
         }
     }
@@ -92,7 +93,7 @@ impl<'a, W: Write + 'a> ZipArchive<'a, W> {
             options,
             compressor,
             file_header_offset as u32,
-            self.data.data_descriptor,
+            self.data.base_flags,
         );
 
         self.sink.write_all(file_header.buffer())?;
@@ -115,7 +116,7 @@ impl<'a, W: Write + 'a> ZipArchive<'a, W> {
         archive_file_entry.compressed_size = compressed_size;
         archive_file_entry.uncompressed_size = uncompressed_size;
 
-        if self.data.data_descriptor {
+        if self.data.base_flags & EXTENDED_LOCAL_HEADER_FLAG != 0 {
             let mut file_descriptor = ArchiveDescriptor::new(DESCRIPTOR_SIZE);
             file_descriptor.write_u32(DATA_DESCRIPTOR_SIGNATURE);
             set_sizes(
@@ -158,7 +159,7 @@ impl<'a, W: Write + 'a> ZipArchive<'a, W> {
     /// # Features
     ///
     /// Requires `tokio-async-io` feature. `futures-async-io` is also available.
-    pub fn finalize(mut self) -> Result<u64, ArchiveError>
+    pub fn finalize(mut self) -> Result<(u64, W), ArchiveError>
     where
         W: Write,
     {
@@ -189,17 +190,6 @@ impl<'a, W: Write + 'a> ZipArchive<'a, W> {
 
         self.data.archive_size = self.sink.get_written_bytes_count()?;
 
-        Ok(self.data.archive_size)
+        Ok((self.data.archive_size, self.sink.get_into()))
     }
-}
-
-fn set_sizes(
-    file_descriptor: &mut ArchiveDescriptor,
-    crc32: u32,
-    compressed_size: u64,
-    uncompressed_size: u64,
-) {
-    file_descriptor.write_u32(crc32);
-    file_descriptor.write_u32(compressed_size as u32);
-    file_descriptor.write_u32(uncompressed_size as u32);
 }

@@ -15,3 +15,5 @@ pub const DATA_DESCRIPTOR_SIGNATURE: u32 = 0x08074b50; // Data descriptor signat
 pub const DEFAULT_VERSION: u8 = 46;
 pub const UNIX: u8 = 3;
 pub const VERSION_MADE_BY: u16 = (UNIX as u16) << 8 | DEFAULT_VERSION as u16;
+
+pub const EXTENDED_LOCAL_HEADER_FLAG: u16 = 1 << 3;

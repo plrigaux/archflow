@@ -30,24 +30,20 @@ pub fn build_file_header(
     options: &FileOptions,
     compressor: CompressionMethod,
     offset: u32,
-    data_descriptor: bool,
+    base_flags: u16,
 ) -> (ArchiveDescriptor, ArchiveFileEntry) {
     let file_nameas_bytes = file_name.as_bytes();
     let file_name_as_bytes_own = file_nameas_bytes.to_owned();
     let file_name_len = file_name_as_bytes_own.len() as u16;
 
     let (date, time) = options.last_modified_time.ms_dos();
-    let mut general_purpose_flags: u16 = 0;
+    let mut general_purpose_flags: u16 = base_flags;
     if file_name_as_bytes_own.len() > file_name.len() {
         general_purpose_flags |= 1 << 11; //set utf8 flag
     }
 
     general_purpose_flags = compressor
         .update_general_purpose_bit_flag(general_purpose_flags, options.compression_level);
-
-    if data_descriptor {
-        general_purpose_flags |= 1 << 3; //create a data descriptor
-    }
 
     let version_needed = compressor.zip_version_needed();
     let compression_method = compressor.zip_code();
@@ -113,6 +109,17 @@ pub fn build_central_directory_file_header(
     central_directory_header.write_bytes(&file_info.file_name_as_bytes); // Filename.
 }
 
+pub fn set_sizes(
+    file_descriptor: &mut ArchiveDescriptor,
+    crc32: u32,
+    compressed_size: u64,
+    uncompressed_size: u64,
+) {
+    file_descriptor.write_u32(crc32);
+    file_descriptor.write_u32(compressed_size as u32);
+    file_descriptor.write_u32(uncompressed_size as u32);
+}
+
 pub fn build_central_directory_end(
     data: &SubZipArchiveData,
     central_directory_offset: u32,
@@ -149,7 +156,7 @@ pub struct SubZipArchiveData {
     pub files_info: Vec<ArchiveFileEntry>,
     archive_comment: Vec<u8>,
     pub archive_size: u64,
-    pub data_descriptor: bool,
+    pub base_flags: u16,
 }
 
 impl SubZipArchiveData {

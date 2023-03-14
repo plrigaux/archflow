@@ -14,7 +14,7 @@ const FILE_TO_COMPRESS: &str = "file1.txt";
 fn compress_file(compressor: CompressionMethod, out_file_name: &str) -> Result<(), ArchiveError> {
     let file = create_new_clean_file(out_file_name);
 
-    let mut archive = ZipArchive::new(file);
+    let mut archive = ZipArchive::new_streamable(file);
 
     let path = Path::new("tests/resources").join(FILE_TO_COMPRESS);
     let mut in_file = File::open(path).unwrap();
@@ -90,7 +90,7 @@ fn archive_multiple() -> Result<(), ArchiveError> {
     let mut in_file = File::open(path)?;
 
     let out_file = create_new_clean_file(out_file_name);
-    let mut archive = ZipArchive::new(out_file);
+    let mut archive = ZipArchive::new_streamable(out_file);
 
     let options = FileOptions::default().compression_method(CompressionMethod::Xz());
     archive.append_file("file1.txt", &mut in_file, &options)?;

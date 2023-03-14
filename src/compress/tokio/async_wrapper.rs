@@ -1,25 +1,26 @@
+use std::io::Error;
 use std::pin::Pin;
-use std::{fmt::Debug, io::Error};
 use tokio::io::{AsyncSeek, AsyncWrite};
-#[derive(Debug)]
+
 pub struct AsyncWriteWrapper<W: AsyncWrite + Unpin> {
     writer: W,
     written_bytes_count: u64,
 }
 
-#[derive(Debug)]
 pub struct AsyncWriteSeekWrapper<WS: AsyncWrite + AsyncSeek + Unpin> {
     writer: WS,
     written_bytes_count: u64,
 }
 
-pub trait CommonWrapper<W: AsyncWrite + ?Sized>: AsyncWrite + AsyncSeek {
+pub trait CommonWrapper<W: AsyncWrite + Unpin + ?Sized>:
+    AsyncWrite + AsyncSeek + Unpin + std::marker::Send
+{
     fn get_written_bytes_count(&mut self) -> Result<u64, Error>;
     fn set_written_bytes_count(&mut self, count: u64);
     fn get_into(self: Box<Self>) -> W;
 }
 
-impl<W: AsyncWrite + Unpin> CommonWrapper<W> for AsyncWriteWrapper<W> {
+impl<W: AsyncWrite + Unpin + Send> CommonWrapper<W> for AsyncWriteWrapper<W> {
     fn get_written_bytes_count(&mut self) -> Result<u64, Error> {
         Ok(self.written_bytes_count)
     }
@@ -33,7 +34,7 @@ impl<W: AsyncWrite + Unpin> CommonWrapper<W> for AsyncWriteWrapper<W> {
     }
 }
 
-impl<W: AsyncWrite + AsyncSeek + Unpin> CommonWrapper<W> for AsyncWriteSeekWrapper<W> {
+impl<W: AsyncWrite + AsyncSeek + Unpin + Send> CommonWrapper<W> for AsyncWriteSeekWrapper<W> {
     fn get_written_bytes_count(&mut self) -> Result<u64, Error> {
         Ok(self.written_bytes_count)
     }
@@ -53,10 +54,6 @@ impl<W: AsyncWrite + Unpin> AsyncWriteWrapper<W> {
             writer: w,
             written_bytes_count: 0,
         }
-    }
-
-    pub fn retrieve_writer(self) -> W {
-        self.writer
     }
 }
 
@@ -104,6 +101,15 @@ impl<W: AsyncWrite + Unpin> AsyncWrite for AsyncWriteWrapper<W> {
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Result<(), std::io::Error>> {
         Pin::new(&mut self.get_mut().writer).poll_shutdown(cx)
+    }
+}
+
+impl<W: AsyncWrite + AsyncSeek + Unpin> AsyncWriteSeekWrapper<W> {
+    pub fn new(w: W) -> AsyncWriteSeekWrapper<W> {
+        Self {
+            writer: w,
+            written_bytes_count: 0,
+        }
     }
 }
 

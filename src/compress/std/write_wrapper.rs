@@ -42,10 +42,6 @@ impl<W: Write> WriteWrapper<W> {
             written_bytes_count: 0,
         }
     }
-
-    pub fn get_into(self: Box<Self>) -> W {
-        self.writer
-    }
 }
 
 impl<W: Write> Seek for WriteWrapper<W> {

@@ -1,8 +1,7 @@
 use std::path::Path;
 
 use rill::{
-    archive::FileOptions, compress::tokio::archive::ZipArchiveNoStream,
-    compression::CompressionMethod,
+    archive::FileOptions, compress::tokio::archive::ZipArchive, compression::CompressionMethod,
 };
 mod common;
 use common::out_file_name;
@@ -13,7 +12,7 @@ const FILE_TO_COMPRESS: &str = "short_text_file.txt";
 async fn compress_file(compressor: CompressionMethod, out_file_name: &str) {
     let file = create_new_clean_file(out_file_name).await;
 
-    let mut archive = ZipArchiveNoStream::new(file);
+    let mut archive = ZipArchive::new(file);
 
     let path = Path::new("tests/resources").join(FILE_TO_COMPRESS);
 
@@ -25,8 +24,8 @@ async fn compress_file(compressor: CompressionMethod, out_file_name: &str) {
         .await
         .unwrap();
 
-    archive.finalize().await.unwrap();
-    println!("archive size = {:?}", archive.get_archive_size());
+    let results = archive.finalize().await.unwrap();
+    println!("file {:?} archive size = {:?}", out_file_name, results.0);
     //let data = archive.finalize().await.unwrap();
 }
 

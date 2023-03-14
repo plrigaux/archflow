@@ -11,7 +11,7 @@ const FILE_TO_COMPRESS: &str = "ex.txt";
 fn compress_file(compressor: CompressionMethod, out_file_name: &str) -> Result<(), ArchiveError> {
     let file = create_new_clean_file(out_file_name);
 
-    let mut archive = ZipArchive::newseek(file);
+    let mut archive = ZipArchive::new(file);
 
     let mut in_file = b"example".as_ref();
     let options = FileOptions::default().compression_method(compressor);

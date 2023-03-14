@@ -13,7 +13,7 @@ const FILE_TO_COMPRESS: &str = "file1.txt";
 async fn compress_file(compressor: CompressionMethod, out_file_name: &str) {
     let file = create_new_clean_file(out_file_name).await;
 
-    let mut archive = ZipArchive::new(file);
+    let mut archive = ZipArchive::new_streamable(file);
 
     let path = Path::new("tests/resources").join(FILE_TO_COMPRESS);
     let mut in_file = tokio::fs::File::open(path).await.unwrap();
@@ -24,8 +24,8 @@ async fn compress_file(compressor: CompressionMethod, out_file_name: &str) {
         .await
         .unwrap();
 
-    archive.finalize().await.unwrap();
-    println!("archive size = {:?}", archive.get_archive_size());
+    let results = archive.finalize().await.unwrap();
+    println!("file {:?} archive size = {:?}", out_file_name, results.0);
     //let data = archive.finalize().await.unwrap();
 }
 

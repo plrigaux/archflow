@@ -165,7 +165,7 @@ fn compress_lzma(compression_level: Level) -> Result<Stream, ArchiveError> {
 
 #[cfg(test)]
 mod test {
-    use crate::compress::std::write_wrapper::WriteWrapper;
+    use crate::compress::std::write_wrapper::{CommonWrapper, WriteWrapper};
     use crate::compression::Level;
 
     use super::*;
@@ -206,7 +206,7 @@ mod test {
         let mut hasher = Hasher::new();
 
         //let a: AsyncRead = &x;
-        let mut writer = WriteWrapper::new(Vec::new());
+        let mut writer: Box<dyn CommonWrapper<Vec<u8>>> = Box::new(WriteWrapper::new(Vec::new()));
 
         compress(
             compressor,
@@ -217,7 +217,7 @@ mod test {
         )
         .unwrap();
 
-        let temp = Box::new(writer).get_into();
+        let temp = writer.get_into();
         println!("compress len {:?}", temp.len());
         println!("{:X?}", temp);
     }

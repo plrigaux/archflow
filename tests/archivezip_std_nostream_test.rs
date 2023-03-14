@@ -13,7 +13,7 @@ const FILE_TO_COMPRESS: &str = "short_text_file.txt";
 fn compress_file(compressor: CompressionMethod, out_file_name: &str) -> Result<(), ArchiveError> {
     let file = create_new_clean_file(out_file_name);
 
-    let mut archive = ZipArchive::newseek(file);
+    let mut archive = ZipArchive::new(file);
 
     let path = Path::new("tests/resources").join(FILE_TO_COMPRESS);
 

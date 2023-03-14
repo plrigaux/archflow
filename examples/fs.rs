@@ -12,7 +12,7 @@ async fn main() {
     let options = FileOptions::default()
         .compression_method(CompressionMethod::Deflate())
         .last_modified_time(FileDateTime::Now);
-    let mut archive = ZipArchive::new(file);
+    let mut archive = ZipArchive::new_streamable(file);
     archive
         .append_file("file1.txt", &mut Cursor::new(b"hello\n"), &options)
         .await
