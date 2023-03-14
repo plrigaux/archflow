@@ -15,18 +15,12 @@ use crate::error::ArchiveError;
 use crc32fast::Hasher;
 use std::io::{Read, Seek, SeekFrom, Write};
 
-pub struct ZipArchive<W: Write> {
-    sink: WriteWrapper<W>,
+pub struct ZipArchive<'a, W: Write> {
+    sink: Box<dyn CommonWrapper<W> + 'a>,
     data: SubZipArchiveData,
 }
 
-#[derive(Debug)]
-pub struct ZipArchiveNoStream<W: Write + Seek> {
-    sink: WriteSeekWrapper<W>,
-    data: SubZipArchiveData,
-}
-
-impl<W: Write> ZipArchiveCommon for ZipArchive<W> {
+impl<'a, W: Write> ZipArchiveCommon for ZipArchive<'a, W> {
     fn get_archive_size(&self) -> u64 {
         self.data.archive_size
     }
@@ -40,23 +34,31 @@ impl<W: Write> ZipArchiveCommon for ZipArchive<W> {
     }
 }
 
-impl<W: Write> ZipArchive<W> {
+impl<'a, W: Write + 'a> ZipArchive<'a, W> {
     /// Create a new zip archive, using the underlying `Write` to write files' header and payload.
     pub fn new(sink_: W) -> Self {
         let mut data = SubZipArchiveData::default();
         data.data_descriptor = true;
         Self {
-            sink: WriteWrapper::new(sink_),
+            sink: Box::new(WriteWrapper::new(sink_)),
+            data,
+        }
+    }
+    pub fn newseek<S: Write + Seek + 'a>(sink_: S) -> ZipArchive<'a, W>
+    where
+        WriteSeekWrapper<S>: CommonWrapper<W>,
+    {
+        let data = SubZipArchiveData::default();
+
+        let sdfas = WriteSeekWrapper::new(sink_);
+        ZipArchive {
+            sink: Box::new(sdfas),
             data,
         }
     }
 
     pub fn get_archive_size(&mut self) -> Result<u64, ArchiveError> {
         Ok(self.sink.get_written_bytes_count()?)
-    }
-
-    pub fn retrieve_writer(self) -> W {
-        self.sink.get_into()
     }
 
     /// Append a new file to the archive using the provided name, date/time and `AsyncRead` object.  
@@ -81,7 +83,13 @@ impl<W: Write> ZipArchive<W> {
         W: Write,
         R: Read,
     {
-        append_file_std_common(&mut self.sink, &mut self.data, file_name, reader, options)
+        append_file_std_common(
+            self.sink.as_mut(),
+            &mut self.data,
+            file_name,
+            reader,
+            options,
+        )
     }
 
     /// Finalize the archive by writing the necessary metadata to the end of the archive.
@@ -93,58 +101,13 @@ impl<W: Write> ZipArchive<W> {
     /// # Features
     ///
     /// Requires `tokio-async-io` feature. `futures-async-io` is also available.
-    pub fn finalize(mut self) -> Result<(u64, W), ArchiveError>
+    pub fn finalize(mut self) -> Result<u64, ArchiveError>
     where
         W: Write,
     {
-        self.data.archive_size = finalize_std_comon(&mut self.sink, &self.data)?;
+        self.data.archive_size = finalize_std_comon(self.sink.as_mut(), &self.data)?;
 
-        Ok((self.data.archive_size, self.sink.get_into()))
-    }
-}
-
-impl<W: Write + Seek> ZipArchiveNoStream<W> {
-    pub fn new(sink: W) -> Self {
-        //let buf = BufWriter::new(sink_);
-        Self {
-            sink: WriteSeekWrapper::new(sink),
-            data: SubZipArchiveData::default(),
-        }
-    }
-
-    pub fn append_file<R>(
-        &mut self,
-        file_name: &str,
-        reader: &mut R,
-        options: &FileOptions,
-    ) -> Result<(), ArchiveError>
-    where
-        W: Write + Seek,
-        R: Read,
-    {
-        append_file_std_common(&mut self.sink, &mut self.data, file_name, reader, options)
-    }
-
-    /// Finalize the archive by writing the necessary metadata to the end of the archive.
-    ///
-    /// # Error
-    ///
-    /// This function will forward any error found while trying to read from the file stream or while writing to the underlying sink.
-    ///
-    /// # Features
-    ///
-    /// Requires `tokio-async-io` feature. `futures-async-io` is also available.
-    pub fn finalize(mut self) -> Result<(u64, W), ArchiveError>
-    where
-        W: Write,
-    {
-        self.data.archive_size = finalize_std_comon(&mut self.sink, &self.data)?;
-
-        Ok((self.data.archive_size, self.sink.get_into()))
-    }
-
-    pub fn get_archive_size(&mut self) -> Result<u64, ArchiveError> {
-        Ok(self.sink.get_written_bytes_count()?)
+        Ok(self.data.archive_size)
     }
 }
 
@@ -156,7 +119,7 @@ fn append_file_std_common<W, R, T>(
     options: &FileOptions,
 ) -> Result<(), ArchiveError>
 where
-    T: CommonWrapper<W>,
+    T: CommonWrapper<W> + ?Sized,
     W: Write,
     R: Read,
 {
@@ -232,7 +195,7 @@ fn set_sizes(
 
 fn finalize_std_comon<T, W>(sink: &mut T, data: &SubZipArchiveData) -> Result<u64, ArchiveError>
 where
-    T: CommonWrapper<W>,
+    T: CommonWrapper<W> + ?Sized,
     W: Write,
 {
     let central_directory_offset = sink.get_written_bytes_count()? as u32;
@@ -260,18 +223,4 @@ where
     let archive_size = sink.get_written_bytes_count()?;
 
     Ok(archive_size)
-}
-
-impl<W: Write + Seek> ZipArchiveCommon for ZipArchiveNoStream<W> {
-    fn get_data(&self) -> &SubZipArchiveData {
-        &self.data
-    }
-
-    fn get_mut_data(&mut self) -> &mut SubZipArchiveData {
-        &mut self.data
-    }
-
-    fn get_archive_size(&self) -> u64 {
-        self.data.archive_size
-    }
 }

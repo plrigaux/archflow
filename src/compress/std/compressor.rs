@@ -78,7 +78,7 @@ pub fn compress<'a, R, W>(
 ) -> Result<u64, ArchiveError>
 where
     R: Read,
-    W: Write,
+    W: Write + ?Sized,
 {
     match compressor {
         CompressionMethod::Store() => {

@@ -22,7 +22,7 @@ fn compress_file(compressor: CompressionMethod, out_file_name: &str) -> Result<(
     let options = FileOptions::default().compression_method(compressor);
     archive.append_file("file1.txt", &mut in_file, &options)?;
 
-    let (archive_size, _outfile) = archive.finalize()?;
+    let archive_size = archive.finalize()?;
     println!("file {:?} archive size = {:?}", out_file_name, archive_size);
 
     Ok(())

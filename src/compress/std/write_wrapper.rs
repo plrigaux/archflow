@@ -15,7 +15,7 @@ pub struct WriteSeekWrapper<WS: Write + Seek> {
     written_bytes_count: u64,
 }
 
-pub trait CommonWrapper<W: Write>: Write + Seek {
+pub trait CommonWrapper<W: Write + ?Sized>: Write + Seek {
     fn get_written_bytes_count(&mut self) -> Result<u64, Error>;
     fn set_written_bytes_count(&mut self, count: u64);
     fn get_into(self) -> W;

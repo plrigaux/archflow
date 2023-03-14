@@ -1,8 +1,8 @@
 use std::{fs::File, path::Path};
 
 use rill::{
-    archive::FileOptions, compress::std::archive::ZipArchiveNoStream,
-    compression::CompressionMethod, error::ArchiveError,
+    archive::FileOptions, compress::std::archive::ZipArchive, compression::CompressionMethod,
+    error::ArchiveError,
 };
 mod common;
 use common::out_file_name;
@@ -13,7 +13,7 @@ const FILE_TO_COMPRESS: &str = "short_text_file.txt";
 fn compress_file(compressor: CompressionMethod, out_file_name: &str) -> Result<(), ArchiveError> {
     let file = create_new_clean_file(out_file_name);
 
-    let mut archive = ZipArchiveNoStream::new(file);
+    let mut archive = ZipArchive::newseek(file);
 
     let path = Path::new("tests/resources").join(FILE_TO_COMPRESS);
 
@@ -22,7 +22,7 @@ fn compress_file(compressor: CompressionMethod, out_file_name: &str) -> Result<(
     let options = FileOptions::default().compression_method(compressor);
     archive.append_file(FILE_TO_COMPRESS, &mut in_file, &options)?;
 
-    let (archive_size, _outfile) = archive.finalize()?;
+    let archive_size = archive.finalize()?;
     println!("file {:?} archive size = {:?}", out_file_name, archive_size);
     Ok(())
 }

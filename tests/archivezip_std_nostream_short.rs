@@ -1,8 +1,6 @@
+use rill::compress::std::archive::ZipArchive;
 use rill::error::ArchiveError;
-use rill::{
-    archive::FileOptions, compress::std::archive::ZipArchiveNoStream,
-    compression::CompressionMethod,
-};
+use rill::{archive::FileOptions, compression::CompressionMethod};
 
 mod common;
 use common::out_file_name;
@@ -13,7 +11,7 @@ const FILE_TO_COMPRESS: &str = "ex.txt";
 fn compress_file(compressor: CompressionMethod, out_file_name: &str) -> Result<(), ArchiveError> {
     let file = create_new_clean_file(out_file_name);
 
-    let mut archive = ZipArchiveNoStream::new(file);
+    let mut archive = ZipArchive::newseek(file);
 
     let mut in_file = b"example".as_ref();
     let options = FileOptions::default().compression_method(compressor);
@@ -21,7 +19,7 @@ fn compress_file(compressor: CompressionMethod, out_file_name: &str) -> Result<(
         .append_file(FILE_TO_COMPRESS, &mut in_file, &options)
         .unwrap();
 
-    let (archive_size, _outfile) = archive.finalize().unwrap();
+    let archive_size = archive.finalize().unwrap();
     println!("file {:?} archive size = {:?}", out_file_name, archive_size);
     Ok(())
 }
