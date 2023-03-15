@@ -4,6 +4,9 @@ use std::u16;
 use crate::{compression::CompressionMethod, constants::VERSION_MADE_BY};
 use chrono::{DateTime, Datelike, Local, NaiveDate, TimeZone, Timelike, Utc};
 
+/// The archive file complete information.
+///
+/// Most of this information is located in the archive central registry and it's partly duplicated in thier respective file header.
 #[derive(Debug)]
 pub struct ArchiveFileEntry {
     pub version_made_by: u16,
@@ -311,6 +314,30 @@ impl Default for FileDateTime {
     /// Construct a new FileOptions object
     fn default() -> Self {
         FileDateTime::Zero
+    }
+}
+
+/// Tells the compatibility system of the file attribute information.
+///
+/// Mapping as per [PKWARE's APPNOTE.TXT v6.3.10](https://pkware.cachefly.net/webdocs/casestudies/APPNOTE.TXT) section 4.4.2.1
+pub enum FileCompatibilitySystem {
+    /// MS-DOS and OS/2 (FAT / VFAT / FAT32 file systems)
+    Dos = 0,
+    Unix = 3,
+    WindowsNTFS = 10,
+    OsX = 19,
+    Unknown,
+}
+
+impl FileCompatibilitySystem {
+    pub fn from_u8(system: u8) -> FileCompatibilitySystem {
+        use self::FileCompatibilitySystem::*;
+
+        match system {
+            0 => Dos,
+            3 => Unix,
+            _ => Unknown,
+        }
     }
 }
 

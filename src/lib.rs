@@ -11,6 +11,8 @@
 //!
 //! [PKWARE's APPNOTE.TXT v6.3.10](https://pkware.cachefly.net/webdocs/casestudies/APPNOTE.TXT)
 //!
+//! ## Example
+//! ### [File system](examples/fs.rs)
 //!```rust
 //! use archflow::{
 //! archive::FileOptions, compress::tokio::archive::ZipArchive, compression::CompressionMethod,
@@ -31,10 +33,16 @@
 //! let options = options.compression_method(CompressionMethod::Store());
 //! archive.append_file("file2.txt", &mut b"world\n".as_ref(), &options).await?;
 //!
-//! archive.finalize().await?;Ok(())
+//! archive.finalize().await?;
 //!
+//! Ok(())
 //! }
 //!```
+//! ## Disclaimer
+//!
+//!This implementation is inspired by :
+//!- https://github.com/scotow/zipit and
+//!- https://github.com/zip-rs/zip
 
 pub mod archive;
 mod constants;
