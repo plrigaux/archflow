@@ -27,6 +27,7 @@ pub struct ArchiveFileEntry {
     pub file_disk_number: u16,
     pub internal_file_attributes: u16,
     pub external_file_attributes: u32,
+    pub file_comment: Option<Vec<u8>>,
 }
 
 impl ArchiveFileEntry {

@@ -42,6 +42,16 @@ pub fn build_file_header(
         general_purpose_flags |= 1 << 11; //set utf8 flag
     }
 
+    let file_comment = if let Some(comment) = options.comment {
+        let file_comment_as_bytes_own = comment.as_bytes().to_owned();
+        if file_comment_as_bytes_own.len() > comment.len() {
+            general_purpose_flags |= 1 << 11; //set utf8 flag
+        }
+        Some(file_comment_as_bytes_own)
+    } else {
+        None
+    };
+
     general_purpose_flags = compressor
         .update_general_purpose_bit_flag(general_purpose_flags, options.compression_level);
 
@@ -56,11 +66,11 @@ pub fn build_file_header(
     file_header.write_u16(compression_method);
     file_header.write_u16(time);
     file_header.write_u16(date);
-    file_header.write_u32(0);
-    file_header.write_u32(0);
-    file_header.write_u32(0);
-    file_header.write_u16(file_name_len);
-    file_header.write_u16(0);
+    file_header.write_u32(0); // CRC-32
+    file_header.write_u32(0); // compressed size
+    file_header.write_u32(0); // uncompressed size
+    file_header.write_u16(file_name_len); // file name length
+    file_header.write_u16(0); //extra field length
     file_header.write_bytes(&file_name_as_bytes_own);
 
     let archive_file_entry = ArchiveFileEntry {
@@ -82,6 +92,7 @@ pub fn build_file_header(
         external_file_attributes: 0,
         file_comment_length: 0,
         file_disk_number: 0,
+        file_comment,
     };
 
     (file_header, archive_file_entry)
@@ -253,6 +264,7 @@ impl ArchiveDescriptor {
             file_disk_number: 0,
             compression_method,
             compressor: CompressionMethod::from_compression_method(compression_method)?,
+            file_comment: None,
         };
 
         Ok(archive_file_entry)

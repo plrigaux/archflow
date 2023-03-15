@@ -153,6 +153,7 @@ impl<R: Read + Seek> ArchiveReader<R> {
             external_file_attributes,
             file_comment_length,
             file_disk_number,
+            file_comment: None,
         };
 
         Ok(a)

@@ -85,7 +85,7 @@ impl<'a, W: AsyncWrite + Unpin + Send + 'a> ZipArchive<'a, W> {
         &mut self,
         file_name: &str,
         reader: &mut R,
-        options: &FileOptions,
+        options: &FileOptions<'a>,
     ) -> Result<(), ArchiveError>
     where
         W: AsyncWrite + Unpin,

@@ -5,20 +5,21 @@ use crate::{
 
 /// Metadata for a file to be written
 #[derive(Clone)]
-pub struct FileOptions {
+pub struct FileOptions<'a> {
     pub compressor: CompressionMethod,
     pub compression_level: Level,
     pub last_modified_time: FileDateTime,
     pub permissions: Option<u32>,
     pub system: FileCompatibilitySystem,
+    pub comment: Option<&'a str>,
 }
 
-impl FileOptions {
+impl<'a> FileOptions<'a> {
     /// Set the compression method for the new file
     ///
     /// The default is `CompressionMethod::Deflated`. If the deflate compression feature is
     /// disabled, `CompressionMethod::Stored` becomes the default.
-    pub fn compression_method(mut self, method: CompressionMethod) -> FileOptions {
+    pub fn compression_method(mut self, method: CompressionMethod) -> FileOptions<'a> {
         self.compressor = method;
         self
     }
@@ -32,7 +33,7 @@ impl FileOptions {
     /// * `Bzip2`: 0 - 9. Default is 6
     /// * `Zstd`: -7 - 22, with zero being mapped to default level. Default is 3
     /// * others: only `None` is allowed
-    pub fn compression_level(mut self, level: Level) -> FileOptions {
+    pub fn compression_level(mut self, level: Level) -> FileOptions<'a> {
         self.compression_level = level;
         self
     }
@@ -41,7 +42,7 @@ impl FileOptions {
     ///
     /// The default is the current timestamp if the 'time' feature is enabled, and 1980-01-01
     /// otherwise
-    pub fn last_modified_time(mut self, mod_time: FileDateTime) -> FileOptions {
+    pub fn last_modified_time(mut self, mod_time: FileDateTime) -> FileOptions<'a> {
         self.last_modified_time = mod_time;
         self
     }
@@ -55,13 +56,19 @@ impl FileOptions {
     /// This method only preserves the file permissions bits (via a `& 0o777`) and discards
     /// higher file mode bits. So it cannot be used to denote an entry as a directory,
     /// symlink, or other special file type.
-    pub fn unix_permissions(mut self, mode: u32) -> FileOptions {
+    pub fn unix_permissions(mut self, mode: u32) -> FileOptions<'a> {
         self.permissions = Some(mode & 0o777);
+        self
+    }
+
+    /// Set the file comment for the new file.
+    pub fn set_file_comment(mut self, comment: &'a str) -> FileOptions<'a> {
+        self.comment = Some(comment);
         self
     }
 }
 
-impl Default for FileOptions {
+impl<'a> Default for FileOptions<'a> {
     /// Construct a new FileOptions object
     fn default() -> Self {
         Self {
@@ -70,6 +77,7 @@ impl Default for FileOptions {
             last_modified_time: FileDateTime::Now,
             permissions: None,
             system: FileCompatibilitySystem::Unix,
+            comment: None,
         }
     }
 }
