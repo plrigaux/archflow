@@ -46,6 +46,8 @@ pub fn build_file_header(
         .update_general_purpose_bit_flag(general_purpose_flags, options.compression_level);
 
     let version_needed = compressor.zip_version_needed();
+    let version_made_by = options.system.update_version_needed(VERSION_MADE_BY);
+
     let compression_method = compressor.zip_code();
     let mut file_header = ArchiveDescriptor::new(FILE_HEADER_BASE_SIZE + file_name_len as u64);
     file_header.write_u32(LOCAL_FILE_HEADER_SIGNATURE);
@@ -62,7 +64,7 @@ pub fn build_file_header(
     file_header.write_bytes(&file_name_as_bytes_own);
 
     let archive_file_entry = ArchiveFileEntry {
-        version_made_by: VERSION_MADE_BY,
+        version_made_by,
         version_needed,
         general_purpose_flags,
         compression_method,
@@ -90,7 +92,7 @@ pub fn build_central_directory_file_header(
     file_info: &ArchiveFileEntry,
 ) {
     central_directory_header.write_u32(CENTRAL_DIRECTORY_ENTRY_SIGNATURE); // Central directory entry signature.
-    central_directory_header.write_u16(file_info.version_made_by()); // Version made by.
+    central_directory_header.write_u16(file_info.version_made_by); // Version made by.
     central_directory_header.write_u16(file_info.version_needed()); // Version needed to extract.
     central_directory_header.write_u16(file_info.general_purpose_flags); // General purpose flag (temporary crc and sizes + UTF-8 filename).
     central_directory_header.write_u16(file_info.compression_method); // Compression method .

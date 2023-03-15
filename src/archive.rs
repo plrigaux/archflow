@@ -1,6 +1,6 @@
 use crate::{
     compression::{CompressionMethod, Level},
-    types::FileDateTime,
+    types::{FileCompatibilitySystem, FileDateTime},
 };
 
 /// Metadata for a file to be written
@@ -10,6 +10,7 @@ pub struct FileOptions {
     pub compression_level: Level,
     pub last_modified_time: FileDateTime,
     pub permissions: Option<u32>,
+    pub system: FileCompatibilitySystem,
 }
 
 impl FileOptions {
@@ -68,6 +69,7 @@ impl Default for FileOptions {
             compression_level: Level::Default,
             last_modified_time: FileDateTime::Now,
             permissions: None,
+            system: FileCompatibilitySystem::Unix,
         }
     }
 }

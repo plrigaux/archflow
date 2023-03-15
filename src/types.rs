@@ -1,7 +1,7 @@
 use core::fmt;
-use std::u16;
+use std::{u16, u8};
 
-use crate::{compression::CompressionMethod, constants::VERSION_MADE_BY};
+use crate::compression::CompressionMethod;
 use chrono::{DateTime, Datelike, Local, NaiveDate, TimeZone, Timelike, Utc};
 
 /// The archive file complete information.
@@ -38,10 +38,6 @@ impl ArchiveFileEntry {
             CompressionMethod::BZip2() => 46,
             _ => 20,
         }
-    }
-
-    pub fn version_made_by(&self) -> u16 {
-        VERSION_MADE_BY
     }
 
     fn extended_local_header(&self) -> bool {
@@ -320,24 +316,45 @@ impl Default for FileDateTime {
 /// Tells the compatibility system of the file attribute information.
 ///
 /// Mapping as per [PKWARE's APPNOTE.TXT v6.3.10](https://pkware.cachefly.net/webdocs/casestudies/APPNOTE.TXT) section 4.4.2.1
+#[repr(u8)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum FileCompatibilitySystem {
     /// MS-DOS and OS/2 (FAT / VFAT / FAT32 file systems)
     Dos = 0,
     Unix = 3,
     WindowsNTFS = 10,
     OsX = 19,
-    Unknown,
+    Unknown(u8),
 }
 
 impl FileCompatibilitySystem {
-    pub fn from_u8(system: u8) -> FileCompatibilitySystem {
+    pub fn from_u8(system_code: u8) -> FileCompatibilitySystem {
         use self::FileCompatibilitySystem::*;
 
-        match system {
+        match system_code {
             0 => Dos,
             3 => Unix,
-            _ => Unknown,
+            10 => WindowsNTFS,
+            19 => OsX,
+            _ => Unknown(system_code),
         }
+    }
+
+    pub fn value(&self) -> u8 {
+        match *self {
+            FileCompatibilitySystem::Dos => 0,
+            FileCompatibilitySystem::Unix => 3,
+            FileCompatibilitySystem::WindowsNTFS => 10,
+            FileCompatibilitySystem::OsX => 19,
+            FileCompatibilitySystem::Unknown(val) => val,
+        }
+    }
+
+    /// Add the system code to the version needed
+    pub fn update_version_needed(&self, version_needed: u16) -> u16 {
+        let val = self.value();
+
+        (version_needed & 0xFF) | ((val as u16) << 8)
     }
 }
 
@@ -381,5 +398,35 @@ mod test {
         println!("{:?}", chrono::offset::Utc::now());
         let ts = chrono::offset::Utc::now().timestamp() as i32;
         println!("{:?}", ts);
+    }
+
+    #[test]
+    fn test_file_compatibility_system() {
+        assert_eq!(FileCompatibilitySystem::Dos.value(), 0);
+        assert_eq!(FileCompatibilitySystem::Unix.value(), 3);
+        assert_eq!(FileCompatibilitySystem::WindowsNTFS.value(), 10);
+        assert_eq!(FileCompatibilitySystem::OsX.value(), 19);
+        assert_eq!(FileCompatibilitySystem::Unknown(34).value(), 34);
+
+        assert_eq!(
+            FileCompatibilitySystem::from_u8(0),
+            FileCompatibilitySystem::Dos
+        );
+        assert_eq!(
+            FileCompatibilitySystem::from_u8(3),
+            FileCompatibilitySystem::Unix
+        );
+        assert_eq!(
+            FileCompatibilitySystem::from_u8(10),
+            FileCompatibilitySystem::WindowsNTFS
+        );
+        assert_eq!(
+            FileCompatibilitySystem::from_u8(19),
+            FileCompatibilitySystem::OsX
+        );
+        assert_eq!(
+            FileCompatibilitySystem::from_u8(55),
+            FileCompatibilitySystem::Unknown(55)
+        );
     }
 }
