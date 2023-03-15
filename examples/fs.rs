@@ -1,6 +1,5 @@
-use rill::{
+use archflow::{
     archive::FileOptions, compress::tokio::archive::ZipArchive, compression::CompressionMethod,
-    types::FileDateTime,
 };
 use std::io::Cursor;
 use tokio::fs::File;
@@ -9,9 +8,8 @@ use tokio::fs::File;
 async fn main() {
     let file = File::create("archive.zip").await.unwrap();
 
-    let options = FileOptions::default()
-        .compression_method(CompressionMethod::Deflate())
-        .last_modified_time(FileDateTime::Now);
+    let options = FileOptions::default().compression_method(CompressionMethod::Deflate());
+
     let mut archive = ZipArchive::new_streamable(file);
     archive
         .append_file("file1.txt", &mut Cursor::new(b"hello\n"), &options)

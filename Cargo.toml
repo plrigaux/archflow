@@ -1,6 +1,6 @@
 [package]
-name = "rill"
-version = "0.0.1"
+name = "archflow"
+version = "0.0.0"
 edition = "2021"
 license = "MIT"
 readme = "README.md"
@@ -9,7 +9,7 @@ categories = ["compression", "asynchronous", "archive"]
 keywords = ["io", "async", "non-blocking", "zip", "archive", "tokio"]
 
 [lib]
-name = "rill"
+name = "archflow"
 path = "src/lib.rs"
 
 

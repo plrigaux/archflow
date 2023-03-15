@@ -66,7 +66,7 @@ impl Default for FileOptions {
         Self {
             compressor: CompressionMethod::Deflate(),
             compression_level: Level::Default,
-            last_modified_time: FileDateTime::default(),
+            last_modified_time: FileDateTime::Now,
             permissions: None,
         }
     }

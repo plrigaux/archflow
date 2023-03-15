@@ -1,4 +1,4 @@
-use rill::compression::CompressionMethod;
+use archflow::compression::CompressionMethod;
 
 pub mod std;
 pub mod tokio;

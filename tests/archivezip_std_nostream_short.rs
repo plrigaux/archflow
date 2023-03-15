@@ -1,6 +1,6 @@
-use rill::compress::std::archive::ZipArchive;
-use rill::error::ArchiveError;
-use rill::{archive::FileOptions, compression::CompressionMethod};
+use archflow::compress::std::archive::ZipArchive;
+use archflow::error::ArchiveError;
+use archflow::{archive::FileOptions, compression::CompressionMethod};
 
 mod common;
 use common::out_file_name;

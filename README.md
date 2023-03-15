@@ -15,11 +15,12 @@ Supported compression formats:
  - bzip2
  - zstd
  - xz
- - LZMA
 
-## Limitations
+## Todos
 
-- No zip64.
+- implement zip64
+- implement some zip features (unix time, file comments, ...)
+- add more cargo features like for compressors selection
 
 ## Examples
 

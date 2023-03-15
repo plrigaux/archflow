@@ -1,7 +1,7 @@
 use std::{fs::File, path::Path};
 
-use rill::error::ArchiveError;
-use rill::{
+use archflow::error::ArchiveError;
+use archflow::{
     archive::FileOptions, compress::std::archive::ZipArchive, compression::CompressionMethod,
 };
 mod common;
