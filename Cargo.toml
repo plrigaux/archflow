@@ -6,7 +6,7 @@ license = "MIT"
 readme = "README.md"
 description = "Create a streamable Zip archive"
 categories = ["compression", "asynchronous", "archive"]
-keywords = ["io", "async", "non-blocking", "zip", "archive", "tokio"]
+keywords = ["async", "non-blocking", "zip", "archive", "tokio"]
 homepage = "https://github.com/plrigaux/archflow"
 
 [lib]
