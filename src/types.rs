@@ -23,7 +23,6 @@ pub struct ArchiveFileEntry {
     pub file_name_as_bytes: Vec<u8>,
     pub offset: u32,
     pub compressor: CompressionMethod,
-    pub file_comment_length: u16,
     pub file_disk_number: u16,
     pub internal_file_attributes: u16,
     pub external_file_attributes: u32,
@@ -55,6 +54,18 @@ impl ArchiveFileEntry {
 
         (major, minor)
     }
+
+    pub(crate) fn file_comment_length(&self) -> u16 {
+        match &self.file_comment {
+            Some(comment) => comment.len() as u16,
+            None => 0,
+        }
+    }
+
+    fn system_origin(&self) -> String {
+        let system_code = self.version_made_by.to_be_bytes()[0];
+        FileCompatibilitySystem::from_u8(system_code).to_string()
+    }
 }
 
 impl fmt::Display for ArchiveFileEntry {
@@ -63,12 +74,21 @@ impl fmt::Display for ArchiveFileEntry {
 
         let file_name = String::from_utf8_lossy(&self.file_name_as_bytes);
 
-        writeln!(f, "{}", file_name)?;
+        writeln!(f, "{}\n", file_name)?;
 
         writeln!(
             f,
             "{: <padding$}{}",
             "offset of local header from start of archive:", self.offset
+        )?;
+
+        writeln!(f, "{: <padding$}({:016X}h) bytes", "", self.offset)?;
+
+        writeln!(
+            f,
+            "{: <padding$}{}",
+            "file system or operating system of origin:",
+            self.system_origin()
         )?;
 
         let (major, minor) = ArchiveFileEntry::pretty_version(self.version_needed);
@@ -149,7 +169,35 @@ impl fmt::Display for ArchiveFileEntry {
             f,
             "{: <padding$}{:} characters",
             "length of filename:", self.file_name_len
-        )
+        )?;
+
+        writeln!(
+            f,
+            "{: <padding$}{:} bytes",
+            "length of extra field:", self.extra_field_length
+        )?;
+        writeln!(
+            f,
+            "{: <padding$}{:} characters",
+            "length of file comment:",
+            self.file_comment_length()
+        )?;
+
+        if let Some(comment) = &self.file_comment {
+            writeln!(
+                f,
+                "\n------------------------- file comment begins ----------------------------"
+            )?;
+            let s = String::from_utf8_lossy(comment);
+            writeln!(f, "{}", s)?;
+
+            writeln!(
+                f,
+                "-------------------------- file comment ends -----------------------------"
+            )?;
+        }
+
+        Ok(())
     }
 }
 
@@ -356,6 +404,20 @@ impl FileCompatibilitySystem {
         let val = self.value();
 
         (version_needed & 0xFF) | ((val as u16) << 8)
+    }
+}
+
+impl fmt::Display for FileCompatibilitySystem {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let label = match self {
+            FileCompatibilitySystem::Dos => "MS-DOS, OS/2 or NT FAT".to_owned(),
+            FileCompatibilitySystem::Unix => "Unix".to_owned(),
+            FileCompatibilitySystem::WindowsNTFS => "Windows NTFS".to_owned(),
+            FileCompatibilitySystem::OsX => "OsX".to_owned(),
+            FileCompatibilitySystem::Unknown(val) => format!("unknown ({})", val),
+        };
+
+        write!(f, "{}", label)
     }
 }
 

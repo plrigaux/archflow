@@ -1,6 +1,7 @@
 use std::{fs::File, path::Path};
 
 use archflow::error::ArchiveError;
+use archflow::uncompress::ArchiveReader;
 use archflow::{
     archive::FileOptions, compress::std::archive::ZipArchive, compression::CompressionMethod,
 };
@@ -99,17 +100,24 @@ fn archive_multiple() -> Result<(), ArchiveError> {
     let options = FileOptions::default().compression_method(CompressionMethod::Deflate());
     archive.append_file("file2.txt", &mut in_file, &options)?;
 
-    let options = FileOptions::default().compression_method(CompressionMethod::Deflate());
+    let options = FileOptions::default()
+        .compression_method(CompressionMethod::Store())
+        .set_file_comment("This is a store file");
     archive.append_file("file4.txt", &mut b"Some string data".as_ref(), &options)?;
 
-    archive.finalize()?;
+    archive.set_archive_comment("This is a comment for the archive, This is a comment for the archive, This is a comment for the archive, This is a comment for the archive");
+    let (archive_size, out_file) = archive.finalize()?;
 
-    /*let options = FileOptions::default().compression_method(CompressionMethod::Deflate());
-         archive.append_file(
-        "file5.txt",
-        &mut b"Some string data plus ".as_ref(),
-        &options,
-    )?; */
+    println!("Archive size {}", archive_size);
+
+    println!("Archive file {:?}", out_file);
+
+    let out_file_path = Path::new("/tmp/archflow/std/test_multiple.zip");
+    let out_file = File::open(out_file_path).unwrap();
+
+    let archive_read = ArchiveReader::new(out_file).unwrap();
+
+    println!("{}", archive_read);
 
     Ok(())
 }

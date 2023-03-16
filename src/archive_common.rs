@@ -90,7 +90,6 @@ pub fn build_file_header(
         compressor,
         internal_file_attributes: 0,
         external_file_attributes: 0,
-        file_comment_length: 0,
         file_disk_number: 0,
         file_comment,
     };
@@ -114,12 +113,16 @@ pub fn build_central_directory_file_header(
     central_directory_header.write_u32(file_info.uncompressed_size as u32); // Uncompressed size.
     central_directory_header.write_u16(file_info.file_name_len); // Filename length.
     central_directory_header.write_u16(0u16); // Extra field length.
-    central_directory_header.write_u16(0u16); // File comment length.
+    central_directory_header.write_u16(file_info.file_comment_length()); // File comment length.
     central_directory_header.write_u16(0u16); // File's Disk number.
     central_directory_header.write_u16(0u16); // Internal file attributes.
     central_directory_header.write_u32((0o100644 << 16) as u32); // External file attributes (regular file / rw-r--r--).
     central_directory_header.write_u32(file_info.offset); // Offset from start of file to local file header.
     central_directory_header.write_bytes(&file_info.file_name_as_bytes); // Filename.
+
+    if let Some(comment) = &file_info.file_comment {
+        central_directory_header.write_bytes(comment); // file comment.
+    }
 }
 
 pub fn set_sizes(
@@ -146,6 +149,7 @@ pub fn build_central_directory_end(
         central_directory_size,
         offset_of_start_of_central_directory: central_directory_offset,
         zip_file_comment_length: data.archive_comment.len() as u16,
+        archive_comment: Vec::new(),
     };
 
     let mut end_of_central_directory = ArchiveDescriptor::new(END_OF_CENTRAL_DIRECTORY_SIZE);
@@ -173,7 +177,7 @@ pub struct SubZipArchiveData {
 }
 
 impl SubZipArchiveData {
-    fn set_archive_comment(&mut self, comment: &str) {
+    pub fn set_archive_comment(&mut self, comment: &str) {
         let bytes = comment.as_bytes();
         let len = std::cmp::min(bytes.len(), u16::MAX as usize);
         self.archive_comment = bytes[0..len].to_owned();
@@ -260,7 +264,6 @@ impl ArchiveDescriptor {
             offset: 0,
             internal_file_attributes: 0,
             external_file_attributes: 0,
-            file_comment_length: 0,
             file_disk_number: 0,
             compression_method,
             compressor: CompressionMethod::from_compression_method(compression_method)?,
@@ -285,6 +288,10 @@ const U_16_LEN: usize = ::std::mem::size_of::<u16>();
 impl ArchiveDescriptorReader {
     pub fn new() -> ArchiveDescriptorReader {
         ArchiveDescriptorReader { index: 0 }
+    }
+
+    pub fn get_index(&self) -> usize {
+        self.index
     }
 
     pub fn read_u32(&mut self, stream: &[u8]) -> u32 {
@@ -330,7 +337,10 @@ impl ArchiveDescriptorReader {
 
         self.index = upper_bound;
 
-        println!("read_u16 value: {:?} new index {:}", value, self.index);
+        println!(
+            "read_utf8_string value: {:?} new index {:}",
+            value, self.index
+        );
 
         value
     }
@@ -339,7 +349,7 @@ impl ArchiveDescriptorReader {
         let upper_bound = self.index + len;
 
         println!(
-            "read_utf8_string lb: {:?} up: {:} ({:} bytes) from a {:} length array.",
+            "read_bytes lb: {:?} up: {:} ({:} bytes) from a {:} length array.",
             self.index,
             upper_bound,
             len,
@@ -350,7 +360,7 @@ impl ArchiveDescriptorReader {
 
         self.index = upper_bound;
 
-        println!("read_u16 value: {:?} new index {:}", value, self.index);
+        println!("read_bytes value: {:?} new index {:}", value, self.index);
 
         value
     }
@@ -364,6 +374,7 @@ pub struct CentralDirectoryEnd {
     pub central_directory_size: u32,
     pub offset_of_start_of_central_directory: u32,
     pub zip_file_comment_length: u16,
+    pub archive_comment: Vec<u8>,
 }
 
 #[cfg(test)]

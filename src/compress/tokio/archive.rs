@@ -205,4 +205,8 @@ impl<'a, W: AsyncWrite + Unpin + Send + 'a> ZipArchive<'a, W> {
 
         Ok((self.data.archive_size, self.sink.get_into()))
     }
+
+    pub fn set_archive_comment(&mut self, comment: &str) {
+        self.data.set_archive_comment(comment);
+    }
 }
