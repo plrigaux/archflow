@@ -137,50 +137,55 @@ pub fn set_sizes(
 }
 
 pub fn build_central_directory_end(
-    data: &SubZipArchiveData,
+    data: &mut SubZipArchiveData,
     central_directory_offset: u32,
     central_directory_size: u32,
 ) -> ArchiveDescriptor {
-    let dir_end = CentralDirectoryEnd {
-        disk_number: 0,
-        disk_with_central_directory: 0,
-        total_number_of_entries_on_this_disk: data.files_info.len() as u16,
-        total_number_of_entries: data.files_info.len() as u16,
-        central_directory_size,
-        offset_of_start_of_central_directory: central_directory_offset,
-        zip_file_comment_length: data.archive_comment.len() as u16,
-        archive_comment: Vec::new(),
-    };
+    data.central_directory_end.disk_number = 0;
+    data.central_directory_end.disk_with_central_directory = 0;
+    data.central_directory_end
+        .total_number_of_entries_on_this_disk = data.files_info.len() as u16;
+    data.central_directory_end.total_number_of_entries = data.files_info.len() as u16;
+    data.central_directory_end.central_directory_size = central_directory_size;
+    data.central_directory_end
+        .offset_of_start_of_central_directory = central_directory_offset;
 
     let mut end_of_central_directory = ArchiveDescriptor::new(END_OF_CENTRAL_DIRECTORY_SIZE);
     end_of_central_directory.write_u32(CENTRAL_DIRECTORY_END_SIGNATURE);
-    end_of_central_directory.write_u16(dir_end.disk_number);
-    end_of_central_directory.write_u16(dir_end.disk_with_central_directory);
-    end_of_central_directory.write_u16(dir_end.total_number_of_entries_on_this_disk);
-    end_of_central_directory.write_u16(dir_end.total_number_of_entries);
-    end_of_central_directory.write_u32(dir_end.central_directory_size);
-    end_of_central_directory.write_u32(dir_end.offset_of_start_of_central_directory);
-    end_of_central_directory.write_u16(dir_end.zip_file_comment_length);
+    end_of_central_directory.write_u16(data.central_directory_end.disk_number);
+    end_of_central_directory.write_u16(data.central_directory_end.disk_with_central_directory);
+    end_of_central_directory.write_u16(
+        data.central_directory_end
+            .total_number_of_entries_on_this_disk,
+    );
+    end_of_central_directory.write_u16(data.central_directory_end.total_number_of_entries);
+    end_of_central_directory.write_u32(data.central_directory_end.central_directory_size);
+    end_of_central_directory.write_u32(
+        data.central_directory_end
+            .offset_of_start_of_central_directory,
+    );
 
-    if dir_end.zip_file_comment_length > 0 {
-        end_of_central_directory.write_bytes(&data.archive_comment);
+    if let Some(comment) = &data.central_directory_end.archive_comment {
+        end_of_central_directory.write_u16(comment.len() as u16);
+        end_of_central_directory.write_bytes(comment);
+    } else {
+        end_of_central_directory.write_u16(0);
     }
+
     end_of_central_directory
 }
 
 #[derive(Debug, Default)]
 pub struct SubZipArchiveData {
     pub files_info: Vec<ArchiveFileEntry>,
-    archive_comment: Vec<u8>,
+    central_directory_end: CentralDirectoryEnd,
     pub archive_size: u64,
     pub base_flags: u16,
 }
 
 impl SubZipArchiveData {
     pub fn set_archive_comment(&mut self, comment: &str) {
-        let bytes = comment.as_bytes();
-        let len = std::cmp::min(bytes.len(), u16::MAX as usize);
-        self.archive_comment = bytes[0..len].to_owned();
+        self.central_directory_end.set_archive_comment(comment)
     }
 }
 
@@ -365,7 +370,7 @@ impl ArchiveDescriptorReader {
         value
     }
 }
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct CentralDirectoryEnd {
     pub disk_number: u16,
     pub disk_with_central_directory: u16,
@@ -373,8 +378,22 @@ pub struct CentralDirectoryEnd {
     pub total_number_of_entries: u16,
     pub central_directory_size: u32,
     pub offset_of_start_of_central_directory: u32,
-    pub zip_file_comment_length: u16,
-    pub archive_comment: Vec<u8>,
+    pub archive_comment: Option<Vec<u8>>,
+}
+
+impl CentralDirectoryEnd {
+    pub fn zip_file_comment_length(&self) -> u16 {
+        match &self.archive_comment {
+            Some(comment) => comment.len() as u16,
+            None => 0,
+        }
+    }
+
+    pub fn set_archive_comment(&mut self, comment: &str) {
+        let bytes = comment.as_bytes();
+        let len = std::cmp::min(bytes.len(), u16::MAX as usize);
+        self.archive_comment = Some(bytes[0..len].to_owned());
+    }
 }
 
 #[cfg(test)]

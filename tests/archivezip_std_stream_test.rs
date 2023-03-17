@@ -119,5 +119,11 @@ fn archive_multiple() -> Result<(), ArchiveError> {
 
     println!("{}", archive_read);
 
+    //test files
+
+    //test time
+
+    //test compression meth
+
     Ok(())
 }

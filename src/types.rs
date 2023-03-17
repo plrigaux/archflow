@@ -48,6 +48,7 @@ impl ArchiveFileEntry {
         self.general_purpose_flags & (1u16 << 0) != 0
     }
 
+    ///Retreive the version in a pretty format
     fn pretty_version(zip_version: u16) -> (u16, u16) {
         let major = zip_version / 10;
         let minor = zip_version % 10;

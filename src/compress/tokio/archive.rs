@@ -190,7 +190,7 @@ impl<'a, W: AsyncWrite + Unpin + Send + 'a> ZipArchive<'a, W> {
         let central_directory_size: u32 = current_archive_size as u32 - central_directory_offset;
 
         let end_of_central_directory = build_central_directory_end(
-            &self.data,
+            &mut self.data,
             central_directory_offset,
             central_directory_size,
         );

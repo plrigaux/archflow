@@ -214,8 +214,7 @@ impl<R: Read + Seek> ArchiveReader<R> {
             total_number_of_entries,
             central_directory_size,
             offset_of_start_of_central_directory,
-            zip_file_comment_length,
-            archive_comment,
+            archive_comment: Some(archive_comment),
         };
 
         Ok(central_directory_end)
@@ -252,19 +251,17 @@ impl<R: Read + Seek> Display for ArchiveReader<R> {
 
         writeln!(f, "Archive:  xxxxxxxxxx.zip")?;
 
-        if self.central_directory_end.zip_file_comment_length != 0 {
+        if let Some(archive_comment) = &self.central_directory_end.archive_comment {
             writeln!(
                 f,
                 "The zipfile comment is {} bytes long and contains the following text:",
-                self.central_directory_end.zip_file_comment_length
+                archive_comment.len()
             )?;
             writeln!(
                 f,
                 "======================== zipfile comment begins =========================="
             )?;
-
-            let comment = String::from_utf8_lossy(&self.central_directory_end.archive_comment);
-            writeln!(f, "{}", comment)?;
+            writeln!(f, "{}", String::from_utf8_lossy(archive_comment))?;
             writeln!(
                 f,
                 "========================= zipfile comment ends ==========================="
