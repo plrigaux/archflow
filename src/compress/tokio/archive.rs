@@ -1,44 +1,40 @@
 use super::async_wrapper::{AsyncWriteSeekWrapper, AsyncWriteWrapper, CommonWrapper};
 use super::compressor::compress;
 
-use crate::archive::FileOptions;
 use crate::archive_common::{
     build_central_directory_end, build_central_directory_file_header, build_file_header, set_sizes,
-    ArchiveDescriptor, SubZipArchiveData, ZipArchiveCommon,
+    ArchiveDescriptor, SubZipArchiveData,
 };
+use crate::compress::FileOptions;
 use crate::compression::Level;
 use crate::constants::{
     CENTRAL_DIRECTORY_ENTRY_BASE_SIZE, DATA_DESCRIPTOR_SIGNATURE, DESCRIPTOR_SIZE,
     EXTENDED_LOCAL_HEADER_FLAG, FILE_HEADER_CRC_OFFSET,
 };
 use crate::error::ArchiveError;
-
 use crc32fast::Hasher;
+use std::io::SeekFrom;
 use tokio::io::{AsyncRead, AsyncSeek, AsyncSeekExt, AsyncWrite, AsyncWriteExt};
 
-use std::io::SeekFrom;
-
+/// A zip archive.
+///
+/// Create a zip archive using either:
+/// * [`new_streamable`](Self::new_streamable()), or
+/// * [`new`](Self::new()).
+///
+/// Then, append files one by one using the [`append`](Self::append()) function.
+/// When finished, use the [`finalize`](Self::finalize()) function.
+///
+/// # Features
+///
+/// Requires `tokio` feature
 pub struct ZipArchive<'a, W: AsyncWrite + Unpin + 'a> {
     sink: Box<dyn CommonWrapper<W> + 'a>,
     data: SubZipArchiveData,
 }
 
-impl<'a, W: AsyncWrite + Unpin + 'a> ZipArchiveCommon for ZipArchive<'a, W> {
-    fn get_archive_size(&self) -> u64 {
-        self.data.archive_size
-    }
-
-    fn get_mut_data(&mut self) -> &mut SubZipArchiveData {
-        &mut self.data
-    }
-
-    fn get_data(&self) -> &SubZipArchiveData {
-        &self.data
-    }
-}
-
 impl<'a, W: AsyncWrite + Unpin + Send + 'a> ZipArchive<'a, W> {
-    /// Create a new zip archive, using the underlying `AsyncWrite` to write files' header and payload.
+    /// Create a new __streamable__ zip archive, using the underlying [`AsyncWrite`] to write files' header and payload.
     pub fn new_streamable(sink_: W) -> Self {
         let mut data = SubZipArchiveData::default();
         data.base_flags = EXTENDED_LOCAL_HEADER_FLAG;
@@ -48,12 +44,16 @@ impl<'a, W: AsyncWrite + Unpin + Send + 'a> ZipArchive<'a, W> {
         }
     }
 
-    pub fn new<S: AsyncWrite + AsyncSeek + Unpin + 'a>(sink_: S) -> ZipArchive<'a, W>
+    /// Create a new zip archive (non streamable), using the underlying [`AsyncWrite`] + [`AsyncSeek`] to
+    /// write files' header and payload.
+    ///
+    /// _Note:_ a non streamable archive save few bytes per files.
+    pub fn new<S: AsyncWrite + AsyncSeek + Unpin + 'a>(sink: S) -> ZipArchive<'a, W>
     where
         AsyncWriteSeekWrapper<S>: CommonWrapper<W>,
     {
         let data = SubZipArchiveData::default();
-        let wrapped_sink = AsyncWriteSeekWrapper::new(sink_);
+        let wrapped_sink = AsyncWriteSeekWrapper::new(sink);
 
         ZipArchive {
             sink: Box::new(wrapped_sink),
@@ -61,31 +61,29 @@ impl<'a, W: AsyncWrite + Unpin + Send + 'a> ZipArchive<'a, W> {
         }
     }
 
+    /// Get archive current total bytes written.
     pub fn get_archive_size(&mut self) -> u64 {
         self.sink.get_written_bytes_count().unwrap()
     }
 
+    /// Get back archive writer.
     pub fn retrieve_writer(self) -> W {
         self.sink.get_into()
     }
 
-    /// Append a new file to the archive using the provided name, date/time and `AsyncRead` object.  
-    /// Filename must be valid UTF-8. Some (very) old zip utilities might mess up filenames during extraction if they contain non-ascii characters.  
-    /// File's payload is not compressed and is given `rw-r--r--` permissions.
+    /// Append a new entity to the archive using the provided name, options and payload as [`AsyncRead`] object to
+    /// be compress.
     ///
-    /// # Error
+    /// # Arguments
+    /// * `file_name` - A for the name of the archive entry
+    /// * `reader` -  The [`AsyncRead`] entity to be archived
+    /// * `options` - Entry's archive options
     ///
-    /// This function will forward any error found while trying to read from the file stream or while writing to the underlying sink.
-    ///
-    /// # Features
-    ///
-    /// Requires `tokio-async-io` feature. `futures-async-io` is also available.
-
-    pub async fn append_file<R>(
+    pub async fn append<R>(
         &mut self,
         file_name: &str,
-        reader: &mut R,
         options: &FileOptions<'a>,
+        payload: &mut R,
     ) -> Result<(), ArchiveError>
     where
         W: AsyncWrite + Unpin,
@@ -93,7 +91,7 @@ impl<'a, W: AsyncWrite + Unpin + Send + 'a> ZipArchive<'a, W> {
     {
         let file_header_offset = self.data.archive_size;
         let mut hasher = Hasher::new();
-        let compressor = options.compressor;
+        let compressor = options.compression_method;
 
         let (file_header, mut archive_file_entry) = build_file_header(
             file_name,
@@ -110,7 +108,7 @@ impl<'a, W: AsyncWrite + Unpin + Send + 'a> ZipArchive<'a, W> {
         let uncompressed_size = compress(
             compressor,
             &mut self.sink,
-            reader,
+            payload,
             &mut hasher,
             Level::Default,
         )
@@ -161,13 +159,7 @@ impl<'a, W: AsyncWrite + Unpin + Send + 'a> ZipArchive<'a, W> {
 
     /// Finalize the archive by writing the necessary metadata to the end of the archive.
     ///
-    /// # Error
-    ///
-    /// This function will forward any error found while trying to read from the file stream or while writing to the underlying sink.
-    ///
-    /// # Features
-    ///
-    /// Requires `tokio-async-io` feature. `futures-async-io` is also available.
+    /// Returns the archive size (bytes) and the [AsyncWrite] object passed at creation.
     pub async fn finalize(mut self) -> Result<(u64, W), ArchiveError>
     where
         W: AsyncWrite + Unpin,
@@ -206,6 +198,7 @@ impl<'a, W: AsyncWrite + Unpin + Send + 'a> ZipArchive<'a, W> {
         Ok((self.data.archive_size, self.sink.get_into()))
     }
 
+    ///Set the archive comment
     pub fn set_archive_comment(&mut self, comment: &str) {
         self.data.set_archive_comment(comment);
     }

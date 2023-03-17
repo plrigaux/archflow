@@ -4,8 +4,8 @@ use std::u32;
 use std::u8;
 
 use super::compression::CompressionMethod;
-use crate::archive::FileOptions;
 
+use crate::compress::FileOptions;
 use crate::constants::CENTRAL_DIRECTORY_END_SIGNATURE;
 use crate::constants::CENTRAL_DIRECTORY_ENTRY_SIGNATURE;
 use crate::constants::END_OF_CENTRAL_DIRECTORY_SIZE;
@@ -389,6 +389,10 @@ impl CentralDirectoryEnd {
         }
     }
 
+    /// Set ZIP archive comment.
+    ///
+    /// This sets the raw bytes of the comment. The comment
+    /// is typically expected to be encoded in UTF-8. Comment is truncated to 0xFFFF bytes.
     pub fn set_archive_comment(&mut self, comment: &str) {
         let bytes = comment.as_bytes();
         let len = std::cmp::min(bytes.len(), u16::MAX as usize);

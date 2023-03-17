@@ -1,6 +1,6 @@
 use archflow::compress::std::archive::ZipArchive;
 use archflow::error::ArchiveError;
-use archflow::{archive::FileOptions, compression::CompressionMethod};
+use archflow::{compress::FileOptions, compression::CompressionMethod};
 
 mod common;
 use common::out_file_name;
@@ -16,7 +16,7 @@ fn compress_file(compressor: CompressionMethod, out_file_name: &str) -> Result<(
     let mut in_file = b"example".as_ref();
     let options = FileOptions::default().compression_method(compressor);
     archive
-        .append_file(FILE_TO_COMPRESS, &mut in_file, &options)
+        .append(FILE_TO_COMPRESS, &options, &mut in_file)
         .unwrap();
 
     let archive_size = archive.finalize().unwrap();

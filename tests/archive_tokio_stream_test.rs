@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use archflow::{
-    archive::FileOptions, compress::tokio::archive::ZipArchive, compression::CompressionMethod,
+    compress::tokio::archive::ZipArchive, compress::FileOptions, compression::CompressionMethod,
 };
 mod common;
 use common::out_file_name;
@@ -20,7 +20,7 @@ async fn compress_file(compressor: CompressionMethod, out_file_name: &str) {
 
     let options = FileOptions::default().compression_method(compressor);
     archive
-        .append_file("file1.txt", &mut in_file, &options)
+        .append("file1.txt", &options, &mut in_file)
         .await
         .unwrap();
 

@@ -1,6 +1,6 @@
 [package]
 name = "archflow"
-version = "0.0.0"
+version = "0.0.1"
 edition = "2021"
 license = "MIT"
 readme = "README.md"
@@ -23,11 +23,12 @@ flate2 = { version = "1.0.23", default-features = false, features =["rust_backen
 bzip2 = { version = "0.4.4", optional = true }
 xz2 = { version = "0.1.6", optional = true }
 zstd = { version = "0.12.3", optional = true }
-byteorder = "1.4.3"
+byteorder = { version = "1.4.3", optional = true }
 
 [dev-dependencies]
 tokio-util = { version = "0.7", default-features = false, features = ["io"] }
 hyper = { version = "0.14", default-features = false, features = ["tcp", "http1", "server", "stream"] }
+archflow = { path = ".", features = ["experimental"] }
 
 [[example]]
 name = "fs"
@@ -41,4 +42,5 @@ path = "examples/hyper.rs"
 default = ["tokio", "std"]
 std = ["dep:flate2", "dep:zstd", "dep:xz2", "dep:bzip2"]
 tokio = ["dep:async-compression"]
+experimental = ["dep:byteorder"]
 

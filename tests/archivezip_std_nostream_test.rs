@@ -1,7 +1,7 @@
 use std::{fs::File, path::Path};
 
 use archflow::{
-    archive::FileOptions, compress::std::archive::ZipArchive, compression::CompressionMethod,
+    compress::std::archive::ZipArchive, compress::FileOptions, compression::CompressionMethod,
     error::ArchiveError,
 };
 mod common;
@@ -20,7 +20,7 @@ fn compress_file(compressor: CompressionMethod, out_file_name: &str) -> Result<(
     let mut in_file = File::open(path)?;
 
     let options = FileOptions::default().compression_method(compressor);
-    archive.append_file(FILE_TO_COMPRESS, &mut in_file, &options)?;
+    archive.append(FILE_TO_COMPRESS, &options, &mut in_file)?;
 
     let archive_size = archive.finalize()?;
     println!("file {:?} archive size = {:?}", out_file_name, archive_size);

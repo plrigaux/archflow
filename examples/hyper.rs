@@ -1,17 +1,13 @@
 use archflow::{
-    archive::FileOptions, compress::tokio::archive::ZipArchive, compression::CompressionMethod,
+    compress::tokio::archive::ZipArchive, compress::FileOptions, compression::CompressionMethod,
     types::FileDateTime,
 };
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{header, Body, Request, Response, Server, StatusCode};
-use std::io::Cursor;
 use tokio::io::duplex;
 use tokio_util::io::ReaderStream;
 
 async fn zip_archive(_req: Request<Body>) -> Result<Response<Body>, hyper::http::Error> {
-    let (filename_1, mut fd_1) = (String::from("file1.txt"), Cursor::new(b"hello\n".to_vec()));
-    let (filename_2, mut fd_2) = (String::from("file2.txt"), Cursor::new(b"world\n".to_vec()));
-
     let (w, r) = duplex(4096);
     let options = FileOptions::default()
         .compression_method(CompressionMethod::Deflate())
@@ -19,11 +15,11 @@ async fn zip_archive(_req: Request<Body>) -> Result<Response<Body>, hyper::http:
     tokio::spawn(async move {
         let mut archive = ZipArchive::new_streamable(w);
         archive
-            .append_file(&filename_1, &mut fd_1, &options)
+            .append("file1.txt", &options, &mut b"world\n".as_ref())
             .await
             .unwrap();
         archive
-            .append_file(&filename_2, &mut fd_2, &options)
+            .append("file2.txt", &options, &mut b"world\n".as_ref())
             .await
             .unwrap();
         archive.finalize().await.unwrap();

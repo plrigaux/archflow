@@ -1,11 +1,11 @@
 use super::compressor::compress;
 use super::write_wrapper::{CommonWrapper, WriteSeekWrapper, WriteWrapper};
 
-use crate::archive::FileOptions;
 use crate::archive_common::{
     build_central_directory_end, build_central_directory_file_header, build_file_header, set_sizes,
     ArchiveDescriptor, SubZipArchiveData, ZipArchiveCommon,
 };
+use crate::compress::FileOptions;
 use crate::compression::Level;
 use crate::constants::{
     CENTRAL_DIRECTORY_ENTRY_BASE_SIZE, DATA_DESCRIPTOR_SIGNATURE, DESCRIPTOR_SIZE,
@@ -15,6 +15,18 @@ use crate::error::ArchiveError;
 use crc32fast::Hasher;
 use std::io::{Read, Seek, SeekFrom, Write};
 
+/// A zip archive.
+///
+/// Create a zip archive using either:
+/// * [`new_streamable`](Self::new_streamable()), or
+/// * [`new`](Self::new()).
+///
+/// Then, append files one by one using the [`append`](Self::append()) function.
+/// When finished, use the [`finalize`](Self::finalize()) function.
+///
+/// # Features
+///
+/// Requires `std` feature
 pub struct ZipArchive<'a, W: Write> {
     sink: Box<dyn CommonWrapper<W> + 'a>,
     data: SubZipArchiveData,
@@ -35,22 +47,28 @@ impl<'a, W: Write> ZipArchiveCommon for ZipArchive<'a, W> {
 }
 
 impl<'a, W: Write + 'a> ZipArchive<'a, W> {
-    /// Create a new zip archive, using the underlying `Write` to write files' header and payload.
-    /// has a extended local header:
-    pub fn new_streamable(sink_: W) -> Self {
+    /// Create a new zip archive, using the underlying [`Write`] to write
+    /// files' header and payload.
+    ///
+    pub fn new_streamable(sink: W) -> Self {
         let mut data = SubZipArchiveData::default();
         data.base_flags = EXTENDED_LOCAL_HEADER_FLAG; //extended local header
         Self {
-            sink: Box::new(WriteWrapper::new(sink_)),
+            sink: Box::new(WriteWrapper::new(sink)),
             data,
         }
     }
-    pub fn new<S: Write + Seek + 'a>(sink_: S) -> ZipArchive<'a, W>
+
+    /// Create a new zip archive (non streamable), using the underlying [`Write`] + [`Seek`] to
+    /// write files' header and payload.
+    ///
+    /// _Note:_ a non streamable archive save few bytes per files.
+    pub fn new<S: Write + Seek + 'a>(sink: S) -> ZipArchive<'a, W>
     where
         WriteSeekWrapper<S>: CommonWrapper<W>,
     {
         let data = SubZipArchiveData::default();
-        let wrapped_sink = WriteSeekWrapper::new(sink_);
+        let wrapped_sink = WriteSeekWrapper::new(sink);
 
         ZipArchive {
             sink: Box::new(wrapped_sink),
@@ -58,27 +76,24 @@ impl<'a, W: Write + 'a> ZipArchive<'a, W> {
         }
     }
 
+    /// Get archive current total bytes written.
     pub fn get_archive_size(&mut self) -> Result<u64, ArchiveError> {
         Ok(self.sink.get_written_bytes_count()?)
     }
 
-    /// Append a new file to the archive using the provided name, date/time and `AsyncRead` object.  
-    /// Filename must be valid UTF-8. Some (very) old zip utilities might mess up filenames during extraction if they contain non-ascii characters.  
-    /// File's payload is not compressed and is given `rw-r--r--` permissions.
+    /// Append a new entity to the archive using the provided name, options and payload as [`Read`] object to
+    /// be compress.  
     ///
-    /// # Error
+    /// # Arguments
+    /// * `file_name` - A for the name of the archive entry
+    /// * `reader` -  The entity's payload as a [`Read`]
+    /// * `options` - Entry's archive options
     ///
-    /// This function will forward any error found while trying to read from the file stream or while writing to the underlying sink.
-    ///
-    /// # Features
-    ///
-    /// Requires `tokio-async-io` feature. `futures-async-io` is also available.
-
-    pub fn append_file<R>(
+    pub fn append<R>(
         &mut self,
         file_name: &str,
-        reader: &mut R,
         options: &FileOptions,
+        payload: &mut R,
     ) -> Result<(), ArchiveError>
     where
         W: Write,
@@ -86,7 +101,7 @@ impl<'a, W: Write + 'a> ZipArchive<'a, W> {
     {
         let file_header_offset = self.data.archive_size;
         let mut hasher = Hasher::new();
-        let compressor = options.compressor;
+        let compressor = options.compression_method;
 
         let (file_header, mut archive_file_entry) = build_file_header(
             file_name,
@@ -103,7 +118,7 @@ impl<'a, W: Write + 'a> ZipArchive<'a, W> {
         let uncompressed_size = compress(
             compressor,
             &mut self.sink,
-            reader,
+            payload,
             &mut hasher,
             Level::Default,
         )?;
@@ -152,13 +167,7 @@ impl<'a, W: Write + 'a> ZipArchive<'a, W> {
 
     /// Finalize the archive by writing the necessary metadata to the end of the archive.
     ///
-    /// # Error
-    ///
-    /// This function will forward any error found while trying to read from the file stream or while writing to the underlying sink.
-    ///
-    /// # Features
-    ///
-    /// Requires `tokio-async-io` feature. `futures-async-io` is also available.
+    /// Returns the archive size (bytes) and the [Write] object passed at creation.
     pub fn finalize(mut self) -> Result<(u64, W), ArchiveError>
     where
         W: Write,
@@ -193,6 +202,7 @@ impl<'a, W: Write + 'a> ZipArchive<'a, W> {
         Ok((self.data.archive_size, self.sink.get_into()))
     }
 
+    ///Set the archive comment
     pub fn set_archive_comment(&mut self, comment: &str) {
         self.data.set_archive_comment(comment);
     }

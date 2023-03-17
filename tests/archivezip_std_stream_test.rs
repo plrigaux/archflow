@@ -1,9 +1,8 @@
 use std::{fs::File, path::Path};
 
 use archflow::error::ArchiveError;
-use archflow::uncompress::ArchiveReader;
 use archflow::{
-    archive::FileOptions, compress::std::archive::ZipArchive, compression::CompressionMethod,
+    compress::std::archive::ZipArchive, compress::FileOptions, compression::CompressionMethod,
 };
 mod common;
 use common::out_file_name;
@@ -21,7 +20,7 @@ fn compress_file(compressor: CompressionMethod, out_file_name: &str) -> Result<(
     let mut in_file = File::open(path).unwrap();
 
     let options = FileOptions::default().compression_method(compressor);
-    archive.append_file("file1.txt", &mut in_file, &options)?;
+    archive.append("file1.txt", &options, &mut in_file)?;
 
     let archive_size = archive.finalize()?;
     println!("file {:?} archive size = {:?}", out_file_name, archive_size);
@@ -80,50 +79,5 @@ fn archive_structure_compress_xz() -> Result<(), ArchiveError> {
     let out_file_name = out_file_name(compressor, TEST_ID);
 
     compress_file(compressor, &out_file_name)?;
-    Ok(())
-}
-
-#[test]
-fn archive_multiple() -> Result<(), ArchiveError> {
-    let out_file_name = "test_multiple.zip";
-
-    let path = Path::new("tests/resources/lorem_ipsum.txt");
-    let mut in_file = File::open(path)?;
-
-    let out_file = create_new_clean_file(out_file_name);
-    let mut archive = ZipArchive::new_streamable(out_file);
-
-    let options = FileOptions::default().compression_method(CompressionMethod::Xz());
-    archive.append_file("file1.txt", &mut in_file, &options)?;
-
-    let mut in_file = File::open(path)?;
-    let options = FileOptions::default().compression_method(CompressionMethod::Deflate());
-    archive.append_file("file2.txt", &mut in_file, &options)?;
-
-    let options = FileOptions::default()
-        .compression_method(CompressionMethod::Store())
-        .set_file_comment("This is a store file");
-    archive.append_file("file4.txt", &mut b"Some string data".as_ref(), &options)?;
-
-    archive.set_archive_comment("This is a comment for the archive, This is a comment for the archive, This is a comment for the archive, This is a comment for the archive");
-    let (archive_size, out_file) = archive.finalize()?;
-
-    println!("Archive size {}", archive_size);
-
-    println!("Archive file {:?}", out_file);
-
-    let out_file_path = Path::new("/tmp/archflow/std/test_multiple.zip");
-    let out_file = File::open(out_file_path).unwrap();
-
-    let archive_read = ArchiveReader::new(out_file).unwrap();
-
-    println!("{}", archive_read);
-
-    //test files
-
-    //test time
-
-    //test compression meth
-
     Ok(())
 }

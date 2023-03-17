@@ -103,10 +103,21 @@ impl Display for CompressionMethod {
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum Level {
+    /// Fastest quality of compression, usually produces bigger size.
     Fastest,
+
+    /// Best quality of compression, usually produces the smallest size.
     Best,
+
+    /// Default quality of compression defined by the selected compression algorithm.
     Default,
+
+    /// No compression at all
     None,
+
+    /// Precise quality based on the underlying compression algorithms’ qualities.
+    /// The interpretation of this depends on the algorithm chosen and the specific
+    /// implementation backing it. Qualities are implicitly clamped to the algorithm’s maximum.
     Precise(i32),
 }
 

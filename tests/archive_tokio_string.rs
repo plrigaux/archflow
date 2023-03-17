@@ -1,6 +1,6 @@
 use archflow::error::ArchiveError;
 use archflow::{
-    archive::FileOptions, compress::tokio::archive::ZipArchive, compression::CompressionMethod,
+    compress::tokio::archive::ZipArchive, compress::FileOptions, compression::CompressionMethod,
 };
 
 mod common;
@@ -20,7 +20,7 @@ async fn compress_file(
     let mut in_file = b"example".as_ref();
     let options = FileOptions::default().compression_method(compressor);
     archive
-        .append_file(FILE_TO_COMPRESS, &mut in_file, &options)
+        .append(FILE_TO_COMPRESS, &options, &mut in_file)
         .await?;
 
     let results = archive.finalize().await?;

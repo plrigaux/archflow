@@ -1,5 +1,5 @@
 use archflow::{
-    archive::FileOptions, compress::tokio::archive::ZipArchive, compression::CompressionMethod,
+    compress::tokio::archive::ZipArchive, compress::FileOptions, compression::CompressionMethod,
     error::ArchiveError,
 };
 
@@ -14,12 +14,12 @@ async fn main() -> Result<(), ArchiveError> {
     let mut archive = ZipArchive::new_streamable(file);
 
     archive
-        .append_file("file1.txt", &mut b"hello\n".as_ref(), &options)
+        .append("file1.txt", &options, &mut b"hello\n".as_ref())
         .await?;
 
     let options = options.compression_method(CompressionMethod::Store());
     archive
-        .append_file("file2.txt", &mut b"world\n".as_ref(), &options)
+        .append("file2.txt", &options, &mut b"world\n".as_ref())
         .await?;
 
     archive.finalize().await?;

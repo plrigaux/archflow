@@ -17,7 +17,7 @@ where
     #[allow(dead_code)]
     reader: R,
     pub file_entries: Vec<ArchiveFileEntry>,
-    central_directory_end: CentralDirectoryEnd,
+    pub central_directory_end: CentralDirectoryEnd,
 }
 
 impl<R: Read + Seek> ArchiveReader<R> {

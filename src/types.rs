@@ -1,3 +1,4 @@
+extern crate chrono;
 use core::fmt;
 use std::{u16, u8};
 
@@ -66,6 +67,10 @@ impl ArchiveFileEntry {
     fn system_origin(&self) -> String {
         let system_code = self.version_made_by.to_be_bytes()[0];
         FileCompatibilitySystem::from_u8(system_code).to_string()
+    }
+
+    pub fn get_file_name(&self) -> String {
+        String::from_utf8_lossy(&self.file_name_as_bytes).to_string()
     }
 }
 
@@ -323,10 +328,13 @@ impl fmt::Display for DateTimeCS {
 /// Use `FileDateTime::now()` if you want to use the current date and time (`chrono-datetime` feature required).
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum FileDateTime {
-    /// 1980, January 1th, 12AM.
+    /// MS-DOS origin time i.e. 1980, January 1th, 12AM.
     Zero,
+
     /// (year, month, day, hour, minute, second)
     Custom(DateTimeCS),
+
+    ///Current timestamp
     Now,
 }
 
