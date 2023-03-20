@@ -34,7 +34,6 @@ impl ArchiveFileEntry {
     pub fn version_needed(&self) -> u16 {
         // higher versions matched first
         match self.compressor {
-            CompressionMethod::Lzma() => 63,
             CompressionMethod::Zstd() => 63,
             CompressionMethod::BZip2() => 46,
             _ => 20,

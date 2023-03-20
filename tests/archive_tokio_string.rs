@@ -57,15 +57,6 @@ async fn archive_structure_compress_bzip() -> Result<(), ArchiveError> {
 }
 
 #[tokio::test]
-async fn archive_structure_compress_lzma() -> Result<(), ArchiveError> {
-    let compressor = CompressionMethod::Lzma();
-    let out_file_name = out_file_name(compressor, TEST_ID);
-
-    compress_file(compressor, &out_file_name).await?;
-    Ok(())
-}
-
-#[tokio::test]
 async fn archive_structure_compress_zstd() -> Result<(), ArchiveError> {
     let compressor = CompressionMethod::Zstd();
     let out_file_name = out_file_name(compressor, TEST_ID);

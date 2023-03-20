@@ -114,13 +114,7 @@ where
 
             Ok(total_read)
         }
-        CompressionMethod::Lzma() => {
-            let stream = compress_lzma(compression_level)?;
-            let mut encoder = XzEncoder::new_stream(writer, stream);
 
-            let total_read = compress_common!(encoder, hasher, reader);
-            Ok(total_read)
-        }
         CompressionMethod::Zstd() => {
             let zstd_compression_level = match compression_level {
                 Level::Fastest => Ok(1),

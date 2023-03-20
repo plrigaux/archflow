@@ -14,7 +14,6 @@ pub enum CompressionMethod {
     Store(),
     Deflate(),
     BZip2(),
-    Lzma(),
     Zstd(),
     Xz(),
     Unknown(u16),
@@ -26,7 +25,6 @@ impl CompressionMethod {
             CompressionMethod::Store() => STORE,
             CompressionMethod::Deflate() => DEFALTE,
             CompressionMethod::BZip2() => BZIP2,
-            CompressionMethod::Lzma() => LZMA,
             CompressionMethod::Zstd() => ZSTD,
             CompressionMethod::Xz() => XZ,
             CompressionMethod::Unknown(comp_method_code) => *comp_method_code,
@@ -36,7 +34,6 @@ impl CompressionMethod {
     pub fn zip_version_needed(&self) -> u16 {
         // higher versions matched first
         match self {
-            CompressionMethod::Lzma() => 63,
             CompressionMethod::Zstd() => 63,
             CompressionMethod::BZip2() => 46,
             _ => 20,
@@ -51,7 +48,6 @@ impl CompressionMethod {
             STORE => Ok(CompressionMethod::Store()),
             DEFALTE => Ok(CompressionMethod::Deflate()),
             BZIP2 => Ok(CompressionMethod::BZip2()),
-            LZMA => Ok(CompressionMethod::Lzma()),
             ZSTD => Ok(CompressionMethod::Zstd()),
             XZ => Ok(CompressionMethod::Xz()),
             _ => Err(ArchiveError::UnsuportedCompressionMethodCode(
@@ -66,7 +62,6 @@ impl CompressionMethod {
             CompressionMethod::Store() => "store",
             CompressionMethod::Deflate() => "deflate",
             CompressionMethod::BZip2() => "bzip2",
-            CompressionMethod::Lzma() => "lzma",
             CompressionMethod::Zstd() => "zstd",
             CompressionMethod::Xz() => "xz",
             CompressionMethod::Unknown(_) => "unknown",

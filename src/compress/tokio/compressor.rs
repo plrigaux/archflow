@@ -95,13 +95,7 @@ where
 
             Ok(total_read)
         }
-        CompressionMethod::Lzma() => {
-            let mut encoder = LzmaEncoder::with_quality(writer, compression_level.into());
 
-            let total_read = compress_tokio!(encoder, hasher, reader, overtcp);
-
-            Ok(total_read)
-        }
         CompressionMethod::Zstd() => {
             let mut encoder = ZstdEncoder::with_quality(writer, compression_level.into());
 
