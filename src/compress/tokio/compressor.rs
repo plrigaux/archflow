@@ -10,7 +10,7 @@ use crate::{
 };
 
 macro_rules! compress_tokio {
-    ( $encoder:expr, $hasher:expr, $reader:expr) => {{
+    ( $encoder:expr, $hasher:expr, $reader:expr, $overtcp:expr) => {{
         let mut buf = vec![0; 4096];
         let mut total_read: u64 = 0;
 
@@ -26,8 +26,11 @@ macro_rules! compress_tokio {
             //self.sink.write_all(&buf[..read]).await?; // Payload chunk.
         }
         $encoder.flush().await?;
-        $encoder.shutdown().await?;
 
+        //workaround
+        if !$overtcp {
+            $encoder.shutdown().await?;
+        }
         total_read
     }};
 }
@@ -50,6 +53,7 @@ pub async fn compress<'a, R, W>(
     reader: &'a mut R,
     hasher: &'a mut Hasher,
     compression_level: Level,
+    overtcp: bool,
 ) -> Result<u64, ArchiveError>
 where
     R: AsyncRead + Unpin,
@@ -83,7 +87,7 @@ where
         CompressionMethod::Deflate() => {
             let mut zencoder = DeflateEncoder::with_quality(writer, compression_level.into());
 
-            let total_read = compress_tokio!(zencoder, hasher, reader);
+            let total_read = compress_tokio!(zencoder, hasher, reader, overtcp);
 
             Ok(total_read)
         }
@@ -91,28 +95,28 @@ where
         CompressionMethod::BZip2() => {
             let mut zencoder = BzEncoder::with_quality(writer, compression_level.into());
 
-            let total_read = compress_tokio!(zencoder, hasher, reader);
+            let total_read = compress_tokio!(zencoder, hasher, reader, overtcp);
 
             Ok(total_read)
         }
         CompressionMethod::Lzma() => {
             let mut zencoder = LzmaEncoder::with_quality(writer, compression_level.into());
 
-            let total_read = compress_tokio!(zencoder, hasher, reader);
+            let total_read = compress_tokio!(zencoder, hasher, reader, overtcp);
 
             Ok(total_read)
         }
         CompressionMethod::Zstd() => {
             let mut zencoder = ZstdEncoder::with_quality(writer, compression_level.into());
 
-            let total_read = compress_tokio!(zencoder, hasher, reader);
+            let total_read = compress_tokio!(zencoder, hasher, reader, overtcp);
 
             Ok(total_read)
         }
         CompressionMethod::Xz() => {
             let mut zencoder = XzEncoder::with_quality(writer, compression_level.into());
 
-            let total_read = compress_tokio!(zencoder, hasher, reader);
+            let total_read = compress_tokio!(zencoder, hasher, reader, overtcp);
 
             Ok(total_read)
         }
@@ -198,6 +202,7 @@ mod test {
             &mut x.as_ref(),
             &mut hasher,
             Level::Default,
+            false,
         )
         .await
         .unwrap();

@@ -40,7 +40,24 @@ impl<'a, W: AsyncWrite + Unpin + Send + 'a> ZipArchive<'a, W> {
         data.base_flags = EXTENDED_LOCAL_HEADER_FLAG;
         Self {
             sink: Box::new(AsyncWriteWrapper::new(sink_)),
-            data: SubZipArchiveData::default(),
+            data,
+        }
+    }
+
+    /// Create a new __streamable__ zip archive, using the underlying [`AsyncWrite`] to write files' header and payload.
+    ///
+    /// _Work around over the fact the the lib `async-compression` closes the stream when the crompressor finish writing _.
+    ///
+    /// __*This work around doesn't work :(*__ incortporation of the lib `async-compression` has to be consider ...
+    ///
+    #[deprecated(since = "0.0.3", note = "please use `new_streamable` instead")]
+    pub fn new_streamable_over_tcp(sink_: W) -> Self {
+        let mut data = SubZipArchiveData::default();
+        data.base_flags = EXTENDED_LOCAL_HEADER_FLAG;
+        data.overtcp = true;
+        Self {
+            sink: Box::new(AsyncWriteWrapper::new(sink_)),
+            data,
         }
     }
 
@@ -111,6 +128,7 @@ impl<'a, W: AsyncWrite + Unpin + Send + 'a> ZipArchive<'a, W> {
             payload,
             &mut hasher,
             Level::Default,
+            self.data.overtcp,
         )
         .await?;
 

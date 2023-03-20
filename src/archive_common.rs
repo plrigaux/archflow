@@ -181,6 +181,7 @@ pub struct SubZipArchiveData {
     central_directory_end: CentralDirectoryEnd,
     pub archive_size: u64,
     pub base_flags: u16,
+    pub overtcp: bool,
 }
 
 impl SubZipArchiveData {

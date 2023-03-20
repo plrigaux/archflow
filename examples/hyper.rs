@@ -13,7 +13,7 @@ async fn zip_archive(_req: Request<Body>) -> Result<Response<Body>, hyper::http:
         .compression_method(CompressionMethod::Deflate())
         .last_modified_time(FileDateTime::Now);
     tokio::spawn(async move {
-        let mut archive = ZipArchive::new_streamable(w);
+        let mut archive = ZipArchive::new_streamable_over_tcp(w);
         archive
             .append("file1.txt", &options, &mut b"world\n".as_ref())
             .await
@@ -33,7 +33,7 @@ async fn zip_archive(_req: Request<Body>) -> Result<Response<Body>, hyper::http:
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let address = ([127, 0, 0, 1], 8080).into();
+    let address = ([127, 0, 0, 1], 8082).into();
     let service =
         make_service_fn(|_| async { Ok::<_, hyper::http::Error>(service_fn(zip_archive)) });
     let server = Server::bind(&address).serve(service);

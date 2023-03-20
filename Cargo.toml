@@ -29,6 +29,8 @@ byteorder = { version = "1.4.3", optional = true }
 tokio-util = { version = "0.7", default-features = false, features = ["io"] }
 hyper = { version = "0.14", default-features = false, features = ["tcp", "http1", "server", "stream"] }
 archflow = { path = ".", features = ["experimental"] }
+actix-web = "4"
+mime = "0.3.16"
 
 [[example]]
 name = "fs"
@@ -37,6 +39,11 @@ path = "examples/fs.rs"
 [[example]]
 name = "hyper"
 path = "examples/hyper.rs"
+
+[[example]]
+name = "actix"
+path = "examples/actix.rs"
+
 
 [features]
 default = ["tokio", "std"]
