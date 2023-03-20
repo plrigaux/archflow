@@ -1,5 +1,5 @@
-use std::io::Error;
 use std::pin::Pin;
+use std::{io::Error, task::Poll};
 use tokio::io::{AsyncSeek, AsyncWrite};
 
 pub struct AsyncWriteWrapper<W: AsyncWrite + Unpin> {
@@ -96,11 +96,13 @@ impl<W: AsyncWrite + Unpin> AsyncWrite for AsyncWriteWrapper<W> {
         Pin::new(&mut self.get_mut().writer).poll_flush(cx)
     }
 
+    /// The wrapper does't propagate the shutdown to the inner writer, becaause tokio compressors need to
+    /// call this function to finish, but doing so will shutdown TCP stream as well.
     fn poll_shutdown(
         self: Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
+        _cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Result<(), std::io::Error>> {
-        Pin::new(&mut self.get_mut().writer).poll_shutdown(cx)
+        Poll::Ready(Ok(()))
     }
 }
 

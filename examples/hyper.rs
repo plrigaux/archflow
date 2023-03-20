@@ -13,7 +13,7 @@ async fn zip_archive(_req: Request<Body>) -> Result<Response<Body>, hyper::http:
         .compression_method(CompressionMethod::Deflate())
         .last_modified_time(FileDateTime::Now);
     tokio::spawn(async move {
-        let mut archive = ZipArchive::new_streamable_over_tcp(w);
+        let mut archive = ZipArchive::new_streamable(w);
         archive
             .append("file1.txt", &options, &mut b"world\n".as_ref())
             .await

@@ -19,29 +19,34 @@ async fn zip_archive() -> HttpResponse {
         .compression_method(CompressionMethod::Deflate());
 
     tokio::spawn(async move {
-        let mut archive = ZipArchive::new_streamable_over_tcp(w);
+        let mut archive = ZipArchive::new_streamable(w);
 
-        let p = Path::new("./tests/resources/lorem_ipsum.txt");
-        let mut f = File::open(p).await.unwrap();
+        let file_path = Path::new("./tests/resources/lorem_ipsum.txt");
+
+        let mut file = File::open(file_path).await.unwrap();
         archive
-            .append("ipsum_deflate.txt", &options, &mut f)
+            .append("ipsum_deflate.txt", &options, &mut file)
             .await
             .unwrap();
+
         archive
             .append("file1.txt", &options, &mut b"world\n".as_ref())
             .await
             .unwrap();
+
         archive
             .append("file2.txt", &options, &mut b"world\n".as_ref())
             .await
             .unwrap();
 
+        let mut f = File::open(file_path).await.unwrap();
         let options = options.compression_method(CompressionMethod::BZip2());
         archive
             .append("ipsum_bz.txt", &options, &mut f)
             .await
             .unwrap();
 
+        let mut f = File::open(file_path).await.unwrap();
         let options = options.compression_method(CompressionMethod::Xz());
         archive
             .append("ipsum_xz.txt", &options, &mut f)

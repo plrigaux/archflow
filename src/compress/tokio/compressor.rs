@@ -27,10 +27,7 @@ macro_rules! compress_tokio {
         }
         $encoder.flush().await?;
 
-        //workaround
-        if !$overtcp {
-            $encoder.shutdown().await?;
-        }
+        $encoder.shutdown().await?;
         total_read
     }};
 }
@@ -53,7 +50,6 @@ pub async fn compress<'a, R, W>(
     reader: &'a mut R,
     hasher: &'a mut Hasher,
     compression_level: Level,
-    overtcp: bool,
 ) -> Result<u64, ArchiveError>
 where
     R: AsyncRead + Unpin,
@@ -93,30 +89,31 @@ where
         }
 
         CompressionMethod::BZip2() => {
-            let mut zencoder = BzEncoder::with_quality(writer, compression_level.into());
+            let mut encoder = BzEncoder::with_quality(writer, compression_level.into());
 
-            let total_read = compress_tokio!(zencoder, hasher, reader, overtcp);
+            let total_read = compress_tokio!(encoder, hasher, reader, overtcp);
 
             Ok(total_read)
         }
         CompressionMethod::Lzma() => {
-            let mut zencoder = LzmaEncoder::with_quality(writer, compression_level.into());
+            let mut encoder = LzmaEncoder::with_quality(writer, compression_level.into());
 
-            let total_read = compress_tokio!(zencoder, hasher, reader, overtcp);
+            let total_read = compress_tokio!(encoder, hasher, reader, overtcp);
 
             Ok(total_read)
         }
         CompressionMethod::Zstd() => {
-            let mut zencoder = ZstdEncoder::with_quality(writer, compression_level.into());
+            let mut encoder = ZstdEncoder::with_quality(writer, compression_level.into());
 
-            let total_read = compress_tokio!(zencoder, hasher, reader, overtcp);
+            let total_read = compress_tokio!(encoder, hasher, reader, overtcp);
 
             Ok(total_read)
         }
         CompressionMethod::Xz() => {
-            let mut zencoder = XzEncoder::with_quality(writer, compression_level.into());
+            //let bw = BufWriter::new(writer);
+            let mut encoder = XzEncoder::with_quality(writer, compression_level.into());
 
-            let total_read = compress_tokio!(zencoder, hasher, reader, overtcp);
+            let total_read = compress_tokio!(encoder, hasher, reader, overtcp);
 
             Ok(total_read)
         }
@@ -202,7 +199,6 @@ mod test {
             &mut x.as_ref(),
             &mut hasher,
             Level::Default,
-            false,
         )
         .await
         .unwrap();
