@@ -50,7 +50,7 @@
 //! Ok(())
 //! }
 //!```
-//! //! ### [Actix](examples/actix.rs)
+//! ### [Actix](examples/actix.rs)
 //!
 //! Stream a zip archive as a [actix](https://actix.rs/) response:
 //!
