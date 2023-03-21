@@ -2,7 +2,7 @@ extern crate chrono;
 use core::fmt;
 use std::{u16, u8};
 
-use crate::compression::CompressionMethod;
+use crate::{archive_common::ExtraFields, compression::CompressionMethod};
 use chrono::{DateTime, Datelike, Local, NaiveDate, TimeZone, Timelike, Utc};
 
 /// The archive file complete information.
@@ -28,7 +28,7 @@ pub struct ArchiveFileEntry {
     pub internal_file_attributes: u16,
     pub external_file_attributes: u32,
     pub file_comment: Option<Vec<u8>>,
-    pub extra_field: Option<Vec<u8>>,
+    pub extra_fields: Vec<Box<dyn ExtraFields>>,
 }
 
 impl ArchiveFileEntry {

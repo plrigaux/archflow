@@ -1,5 +1,7 @@
 #![allow(dead_code)]
+use std::fmt::Debug;
 use std::str;
+use std::sync::Arc;
 use std::u32;
 use std::u8;
 
@@ -59,21 +61,20 @@ pub fn build_file_header(
     let version_needed = compressor.zip_version_needed();
     let version_made_by = options.system.update_version_needed(VERSION_MADE_BY);
 
-    let mut extra_field: Option<Vec<u8>> = None;
+    let mut extended_timestamp_data = ArchiveDescriptor::new(9);
+
+    let mut extra_fields: Vec<Box<dyn ExtraFields>> = Vec::new();
+
     if options.last_modified_time.extended_timestamp() {
-        let mut extended_timestamp_data = ArchiveDescriptor::new(9);
-        extended_timestamp_data.write_u16(X5455_EXTENDEDTIMESTAMP);
-        extended_timestamp_data.write_u16(5);
-        extended_timestamp_data.write_u8(1); //     The bit set inside the flags by when the last modification time is present in this extra field.
-        extended_timestamp_data.write_i32(options.last_modified_time.timestamp());
-        extra_field = Some(extended_timestamp_data.buffer().to_owned());
+        let ts = ExtendedTimestamp::new(Some(options.last_modified_time.timestamp()), None, None);
+        extra_fields.push(Box::new(ts));
     }
 
-    let extra_field_length = if let Some(ref ex_t) = extra_field {
-        ex_t.len() as u16
-    } else {
-        0
-    };
+    for extra_field in &extra_fields {
+        extra_field.file_header_write_data(&mut extended_timestamp_data)
+    }
+
+    let extra_field_length = extended_timestamp_data.len() as u16;
 
     let compression_method = compressor.zip_code();
     let mut file_header = ArchiveDescriptor::new(FILE_HEADER_BASE_SIZE + file_name_len as u64);
@@ -89,10 +90,7 @@ pub fn build_file_header(
     file_header.write_u16(file_name_len); // file name length
     file_header.write_u16(extra_field_length); //extra field length
     file_header.write_bytes(&file_name_as_bytes_own);
-
-    if let Some(ref ex_t) = extra_field {
-        file_header.write_bytes(ex_t);
-    }
+    file_header.write_bytes(extended_timestamp_data.bytes());
 
     let archive_file_entry = ArchiveFileEntry {
         version_made_by,
@@ -112,7 +110,7 @@ pub fn build_file_header(
         internal_file_attributes: 0,
         external_file_attributes: 0,
         file_disk_number: 0,
-        extra_field,
+        extra_fields,
         file_comment,
     };
 
@@ -142,9 +140,13 @@ pub fn build_central_directory_file_header(
     central_directory_header.write_u32(file_info.offset); // Offset from start of file to local file header.
     central_directory_header.write_bytes(&file_info.file_name_as_bytes); // Filename.
 
-    if let Some(extra_field) = &file_info.extra_field {
-        central_directory_header.write_bytes(extra_field); // file comment.
+    let mut extra_field_buffer = ArchiveDescriptor::new(file_info.extra_field_length as u64);
+
+    for extra_field in &file_info.extra_fields {
+        extra_field.central_header_extra_write_data(&mut extra_field_buffer)
     }
+
+    central_directory_header.write_bytes(extra_field_buffer.bytes()); // file comment.
 
     if let Some(comment) = &file_info.file_comment {
         central_directory_header.write_bytes(comment); // file comment.
@@ -209,7 +211,7 @@ pub struct SubZipArchiveData {
     pub base_flags: u16,
 }
 
-impl SubZipArchiveData {
+impl<'a> SubZipArchiveData {
     pub fn set_archive_comment(&mut self, comment: &str) {
         self.central_directory_end.set_archive_comment(comment)
     }
@@ -308,7 +310,7 @@ impl ArchiveDescriptor {
             compression_method,
             compressor: CompressionMethod::from_compression_method(compression_method)?,
             file_comment: None,
-            extra_field: None,
+            extra_fields: Vec::new(),
         };
 
         Ok(archive_file_entry)
@@ -316,6 +318,10 @@ impl ArchiveDescriptor {
 
     pub fn clear(&mut self) {
         self.buffer.clear();
+    }
+
+    pub fn bytes(&self) -> &[u8] {
+        &self.buffer
     }
 }
 
@@ -433,6 +439,135 @@ impl CentralDirectoryEnd {
         let bytes = comment.as_bytes();
         let len = std::cmp::min(bytes.len(), u16::MAX as usize);
         self.archive_comment = Some(bytes[0..len].to_owned());
+    }
+}
+
+pub trait ExtraFields {
+    fn file_header_extra_field_size(&self) -> u16;
+    fn central_header_extra_field_size(&self) -> u16;
+    fn file_header_write_data(&self, archive_descriptor: &mut ArchiveDescriptor);
+    fn central_header_extra_write_data(&self, archive_descriptor: &mut ArchiveDescriptor);
+}
+
+impl Debug for dyn ExtraFields {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.fmt(f)
+    }
+}
+
+//The central-directory extra field contains:
+//- A subfield with ID 0x5455 (universal time) and 5 data bytes.
+//  The local extra field has UTC/GMT modification/access times.
+//- A subfield with ID 0x7875 (Unix UID/GID (any size)) and 11 data bytes:
+//  01 04 e8 03 00 00 04 e8 03 00 00.
+
+#[derive(Debug, Default)]
+struct ExtendedTimestamp {
+    create_time: Option<i32>,
+    access_time: Option<i32>,
+    modify_time: Option<i32>,
+    flags: u8,
+}
+
+impl ExtendedTimestamp {
+    /// The bit set inside the flags by when the last modification time is present in this extra field.
+    const MODIFY_TIME_BIT: u8 = 1;
+
+    ///  The bit set inside the flags by when the lasr access time is present in this extra field.
+    const ACCESS_TIME_BIT: u8 = 2;
+
+    /// The bit set inside the flags by when the original creation time is present in this extra field.
+    const CREATE_TIME_BIT: u8 = 4;
+
+    fn new(modify_time: Option<i32>, access_time: Option<i32>, create_time: Option<i32>) -> Self {
+        let mut default = Self::default();
+
+        default.set_modify_time(modify_time);
+        default.set_access_time(access_time);
+        default.set_create_time(create_time);
+
+        default
+    }
+
+    fn set_modify_time(&mut self, modify_time: Option<i32>) {
+        self.modify_time = modify_time;
+
+        if modify_time.is_some() {
+            self.flags |= ExtendedTimestamp::MODIFY_TIME_BIT;
+        } else {
+            self.flags &= !ExtendedTimestamp::MODIFY_TIME_BIT;
+        }
+    }
+
+    fn set_access_time(&mut self, access_time: Option<i32>) {
+        self.access_time = access_time;
+
+        if access_time.is_some() {
+            self.flags |= ExtendedTimestamp::ACCESS_TIME_BIT;
+        } else {
+            self.flags &= !ExtendedTimestamp::ACCESS_TIME_BIT;
+        }
+    }
+
+    fn set_create_time(&mut self, create_time: Option<i32>) {
+        self.create_time = create_time;
+
+        if create_time.is_some() {
+            self.flags |= ExtendedTimestamp::CREATE_TIME_BIT;
+        } else {
+            self.flags &= !ExtendedTimestamp::CREATE_TIME_BIT;
+        }
+    }
+
+    fn fill_data(&self, mut archive_descriptor: ArchiveDescriptor) {
+        let mut extended_timestamp_data = ArchiveDescriptor::new(9);
+        archive_descriptor.write_u16(X5455_EXTENDEDTIMESTAMP);
+        archive_descriptor.write_u16(self.file_header_extra_field_data_size());
+        archive_descriptor.write_u8(self.flags); //     The bit set inside the flags by when the last modification time is present in this extra field.
+
+        if let Some(modify_time) = self.modify_time {
+            extended_timestamp_data.write_i32(modify_time);
+        }
+
+        if let Some(access_time) = self.access_time {
+            extended_timestamp_data.write_i32(access_time);
+        }
+
+        if let Some(create_time) = self.create_time {
+            extended_timestamp_data.write_i32(create_time);
+        }
+    }
+
+    fn file_header_extra_field_data_size(&self) -> u16 {
+        let mut size: u16 = 1; //for flags
+        size += (self.flags.count_ones() * 4) as u16;
+        size
+    }
+
+    fn central_header_extra_field_data_size(&self) -> u16 {
+        let mut size: u16 = 1; //for flags
+        size += ((self.flags & ExtendedTimestamp::MODIFY_TIME_BIT).count_ones() * 4) as u16;
+        size
+    }
+
+    fn get_flags() {}
+}
+
+impl ExtraFields for ExtendedTimestamp {
+    fn file_header_extra_field_size(&self) -> u16 {
+        4 + self.file_header_extra_field_data_size()
+    }
+
+    fn central_header_extra_field_size(&self) -> u16 {
+        4 + self.central_header_extra_field_data_size()
+    }
+
+    fn file_header_write_data(&self, archive_descriptor: &mut ArchiveDescriptor) {
+        todo!()
+    }
+
+    fn central_header_extra_write_data(&self, archive_descriptor: &mut ArchiveDescriptor) {
+        todo!()
     }
 }
 

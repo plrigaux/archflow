@@ -20,7 +20,7 @@ where
     pub central_directory_end: CentralDirectoryEnd,
 }
 
-impl<R: Read + Seek> ArchiveReader<R> {
+impl<'a, R: Read + Seek> ArchiveReader<R> {
     pub fn new(mut reader: R) -> Result<ArchiveReader<R>, ArchiveError> {
         let (central_directory_end, file_entries) = Self::parse(&mut reader)?;
 
@@ -147,13 +147,14 @@ impl<R: Read + Seek> ArchiveReader<R> {
 
             let compressor = CompressionMethod::from_compression_method(compression_method)?;
 
-            let extra_field = if extra_field_length != 0 {
+            let extra_fields = if extra_field_length != 0 {
                 let extra_field_as_bytes =
                     indexer.read_bytes(&central_directory_buffer, extra_field_length as usize);
+                //Todo Parse
 
-                Some(extra_field_as_bytes)
+                Vec::new()
             } else {
-                None
+                Vec::new()
             };
 
             let file_comment = if file_comment_length != 0 {
@@ -183,7 +184,7 @@ impl<R: Read + Seek> ArchiveReader<R> {
                 internal_file_attributes,
                 external_file_attributes,
                 file_disk_number,
-                extra_field,
+                extra_fields,
                 file_comment,
             };
 
@@ -231,7 +232,7 @@ impl<R: Read + Seek> ArchiveReader<R> {
     }
 }
 
-impl<R: Read + Seek> Debug for ArchiveReader<R> {
+impl<'a, R: Read + Seek> Debug for ArchiveReader<R> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ArchiveReader")
             .field("file_entries", &self.file_entries)
@@ -239,7 +240,7 @@ impl<R: Read + Seek> Debug for ArchiveReader<R> {
     }
 }
 
-impl<R: Read + Seek> Display for ArchiveReader<R> {
+impl<'a, R: Read + Seek> Display for ArchiveReader<R> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         /*         Archive:  test_multiple.zip
         There is no zipfile comment.
