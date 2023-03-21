@@ -28,6 +28,7 @@ pub struct ArchiveFileEntry {
     pub internal_file_attributes: u16,
     pub external_file_attributes: u32,
     pub file_comment: Option<Vec<u8>>,
+    pub extra_field: Option<Vec<u8>>,
 }
 
 impl ArchiveFileEntry {
@@ -246,6 +247,14 @@ impl DateTimeCS {
         Self::from_chrono_datetime(Local::now())
     }
 
+    pub fn from_timestamp(timestamp: i32) -> Self {
+        match Utc.timestamp_opt(timestamp as i64, 0) {
+            chrono::LocalResult::None => Self::default(),
+            chrono::LocalResult::Single(single) => Self::from_chrono_datetime(single),
+            chrono::LocalResult::Ambiguous(single, _) => Self::from_chrono_datetime(single),
+        }
+    }
+
     pub fn from_msdos(datepart: u16, timepart: u16) -> Self {
         let seconds = (timepart & 0b0000000000011111) << 1;
         let minutes = (timepart & 0b0000011111100000) >> 5;
@@ -297,11 +306,11 @@ impl DateTimeCS {
         (date, time)
     }
 
-    pub fn timestamp(&self) -> i32 {
+    pub fn to_timestamp(&self) -> i32 {
         let local = &self.to_time();
 
         match local.and_local_timezone(Utc) {
-            chrono::LocalResult::None => todo!(),
+            chrono::LocalResult::None => Self::default().to_timestamp(),
             chrono::LocalResult::Single(single) => Self::convert_timestamp(single),
             chrono::LocalResult::Ambiguous(first, _) => Self::convert_timestamp(first),
         }
@@ -333,8 +342,14 @@ pub enum FileDateTime {
     /// (year, month, day, hour, minute, second)
     Custom(DateTimeCS),
 
-    ///Current timestamp
+    ///
     Now,
+
+    /// Current timestamp (seconds since UNIX epoch)
+    UnixNow,
+
+    /// Custom time in Unix format (seconds since UNIX epoch)
+    UnixCustom(i32),
 }
 
 impl FileDateTime {
@@ -343,6 +358,8 @@ impl FileDateTime {
             FileDateTime::Zero => DateTimeCS::default(),
             FileDateTime::Custom(date_time) => *date_time,
             FileDateTime::Now => DateTimeCS::now(),
+            FileDateTime::UnixNow => DateTimeCS::now(),
+            FileDateTime::UnixCustom(timestamp) => DateTimeCS::from_timestamp(*timestamp),
         }
     }
 
@@ -356,10 +373,16 @@ impl FileDateTime {
 
     pub fn timestamp(&self) -> i32 {
         match self {
-            FileDateTime::Zero => DateTimeCS::default().timestamp(),
-            FileDateTime::Custom(date_time) => date_time.timestamp(),
+            FileDateTime::Zero => DateTimeCS::default().to_timestamp(),
+            FileDateTime::Custom(date_time) => date_time.to_timestamp(),
             FileDateTime::Now => DateTimeCS::convert_timestamp(chrono::offset::Utc::now()),
+            FileDateTime::UnixNow => DateTimeCS::convert_timestamp(chrono::offset::Utc::now()),
+            FileDateTime::UnixCustom(timestamp) => *timestamp,
         }
+    }
+
+    pub fn extended_timestamp(&self) -> bool {
+        matches!(self, FileDateTime::UnixNow | FileDateTime::UnixCustom(_))
     }
 }
 

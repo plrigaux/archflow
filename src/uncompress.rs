@@ -147,6 +147,15 @@ impl<R: Read + Seek> ArchiveReader<R> {
 
             let compressor = CompressionMethod::from_compression_method(compression_method)?;
 
+            let extra_field = if extra_field_length != 0 {
+                let extra_field_as_bytes =
+                    indexer.read_bytes(&central_directory_buffer, extra_field_length as usize);
+
+                Some(extra_field_as_bytes)
+            } else {
+                None
+            };
+
             let file_comment = if file_comment_length != 0 {
                 let file_comment_as_bytes =
                     indexer.read_bytes(&central_directory_buffer, file_comment_length as usize);
@@ -174,6 +183,7 @@ impl<R: Read + Seek> ArchiveReader<R> {
                 internal_file_attributes,
                 external_file_attributes,
                 file_disk_number,
+                extra_field,
                 file_comment,
             };
 

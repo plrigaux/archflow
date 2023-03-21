@@ -12,6 +12,7 @@ use crate::constants::END_OF_CENTRAL_DIRECTORY_SIZE;
 use crate::constants::FILE_HEADER_BASE_SIZE;
 use crate::constants::LOCAL_FILE_HEADER_SIGNATURE;
 use crate::constants::VERSION_MADE_BY;
+use crate::constants::X5455_EXTENDEDTIMESTAMP;
 use crate::error::ArchiveError;
 use crate::types::ArchiveFileEntry;
 
@@ -58,6 +59,22 @@ pub fn build_file_header(
     let version_needed = compressor.zip_version_needed();
     let version_made_by = options.system.update_version_needed(VERSION_MADE_BY);
 
+    let mut extra_field: Option<Vec<u8>> = None;
+    if options.last_modified_time.extended_timestamp() {
+        let mut extended_timestamp_data = ArchiveDescriptor::new(9);
+        extended_timestamp_data.write_u16(X5455_EXTENDEDTIMESTAMP);
+        extended_timestamp_data.write_u16(5);
+        extended_timestamp_data.write_u8(1); //     The bit set inside the flags by when the last modification time is present in this extra field.
+        extended_timestamp_data.write_i32(options.last_modified_time.timestamp());
+        extra_field = Some(extended_timestamp_data.buffer().to_owned());
+    }
+
+    let extra_field_length = if let Some(ref ex_t) = extra_field {
+        ex_t.len() as u16
+    } else {
+        0
+    };
+
     let compression_method = compressor.zip_code();
     let mut file_header = ArchiveDescriptor::new(FILE_HEADER_BASE_SIZE + file_name_len as u64);
     file_header.write_u32(LOCAL_FILE_HEADER_SIGNATURE);
@@ -70,8 +87,12 @@ pub fn build_file_header(
     file_header.write_u32(0); // compressed size
     file_header.write_u32(0); // uncompressed size
     file_header.write_u16(file_name_len); // file name length
-    file_header.write_u16(0); //extra field length
+    file_header.write_u16(extra_field_length); //extra field length
     file_header.write_bytes(&file_name_as_bytes_own);
+
+    if let Some(ref ex_t) = extra_field {
+        file_header.write_bytes(ex_t);
+    }
 
     let archive_file_entry = ArchiveFileEntry {
         version_made_by,
@@ -84,13 +105,14 @@ pub fn build_file_header(
         compressed_size: 0,
         uncompressed_size: 0,
         file_name_len,
-        extra_field_length: 0,
+        extra_field_length,
         file_name_as_bytes: file_name.as_bytes().to_owned(),
         offset,
         compressor,
         internal_file_attributes: 0,
         external_file_attributes: 0,
         file_disk_number: 0,
+        extra_field,
         file_comment,
     };
 
@@ -112,13 +134,17 @@ pub fn build_central_directory_file_header(
     central_directory_header.write_u32(file_info.compressed_size as u32); // Compressed size.
     central_directory_header.write_u32(file_info.uncompressed_size as u32); // Uncompressed size.
     central_directory_header.write_u16(file_info.file_name_len); // Filename length.
-    central_directory_header.write_u16(0u16); // Extra field length.
+    central_directory_header.write_u16(file_info.extra_field_length); // Extra field length.
     central_directory_header.write_u16(file_info.file_comment_length()); // File comment length.
     central_directory_header.write_u16(0u16); // File's Disk number.
     central_directory_header.write_u16(0u16); // Internal file attributes.
     central_directory_header.write_u32((0o100644 << 16) as u32); // External file attributes (regular file / rw-r--r--).
     central_directory_header.write_u32(file_info.offset); // Offset from start of file to local file header.
     central_directory_header.write_bytes(&file_info.file_name_as_bytes); // Filename.
+
+    if let Some(extra_field) = &file_info.extra_field {
+        central_directory_header.write_bytes(extra_field); // file comment.
+    }
 
     if let Some(comment) = &file_info.file_comment {
         central_directory_header.write_bytes(comment); // file comment.
@@ -189,6 +215,7 @@ impl SubZipArchiveData {
     }
 }
 
+#[derive(Debug)]
 pub struct ArchiveDescriptor {
     buffer: Vec<u8>,
 }
@@ -200,11 +227,19 @@ impl ArchiveDescriptor {
         }
     }
 
+    pub fn write_u8(&mut self, val: u8) {
+        self.buffer.extend_from_slice(&val.to_le_bytes());
+    }
+
     pub fn write_u16(&mut self, val: u16) {
         self.buffer.extend_from_slice(&val.to_le_bytes());
     }
 
     pub fn write_u32(&mut self, val: u32) {
+        self.buffer.extend_from_slice(&val.to_le_bytes());
+    }
+
+    pub fn write_i32(&mut self, val: i32) {
         self.buffer.extend_from_slice(&val.to_le_bytes());
     }
 
@@ -273,6 +308,7 @@ impl ArchiveDescriptor {
             compression_method,
             compressor: CompressionMethod::from_compression_method(compression_method)?,
             file_comment: None,
+            extra_field: None,
         };
 
         Ok(archive_file_entry)

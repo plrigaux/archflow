@@ -1,6 +1,4 @@
-use async_compression::tokio::write::{
-    BzEncoder, DeflateEncoder, LzmaEncoder, XzEncoder, ZstdEncoder,
-};
+use async_compression::tokio::write::{BzEncoder, DeflateEncoder, XzEncoder, ZstdEncoder};
 use crc32fast::Hasher;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 

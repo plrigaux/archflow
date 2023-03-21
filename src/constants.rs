@@ -17,3 +17,5 @@ pub const UNIX: u8 = 3;
 pub const VERSION_MADE_BY: u16 = (UNIX as u16) << 8 | DEFAULT_VERSION as u16;
 
 pub const EXTENDED_LOCAL_HEADER_FLAG: u16 = 1 << 3;
+
+pub const X5455_EXTENDEDTIMESTAMP: u16 = 0x5455;

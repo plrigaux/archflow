@@ -17,7 +17,9 @@ async fn main() -> Result<(), ArchiveError> {
         .append("file1.txt", &options, &mut b"hello\n".as_ref())
         .await?;
 
-    let options = options.compression_method(CompressionMethod::Store());
+    let options = options
+        .compression_method(CompressionMethod::Store())
+        .last_modified_time(archflow::types::FileDateTime::UnixNow);
     archive
         .append("file2.txt", &options, &mut b"world\n".as_ref())
         .await?;

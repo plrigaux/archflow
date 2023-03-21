@@ -3,7 +3,6 @@ use std::io::{Read, Write};
 use bzip2::write::BzEncoder;
 use crc32fast::Hasher;
 use flate2::{write::DeflateEncoder, Compression};
-use xz2::stream::{LzmaOptions, Stream};
 
 use xz2::write::XzEncoder;
 
@@ -139,22 +138,6 @@ where
 
         _ => Err(ArchiveError::UnsuportedCompressionMethod(compressor)),
     }
-}
-
-fn compress_lzma(compression_level: Level) -> Result<Stream, ArchiveError> {
-    let lzma_compression_level: u32 = match compression_level {
-        Level::Fastest => 1,
-        Level::Best => 9,
-        Level::Default => 6,
-        Level::None => 0,
-        Level::Precise(val) => val as u32,
-    };
-
-    let options = LzmaOptions::new_preset(lzma_compression_level)?;
-
-    let stream = xz2::stream::Stream::new_lzma_encoder(&options)?;
-
-    Ok(stream)
 }
 
 #[cfg(test)]
