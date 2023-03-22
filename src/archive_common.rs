@@ -1,7 +1,6 @@
 #![allow(dead_code)]
 use std::fmt::Debug;
 use std::str;
-use std::sync::Arc;
 use std::u32;
 use std::u8;
 
@@ -61,8 +60,6 @@ pub fn build_file_header(
     let version_needed = compressor.zip_version_needed();
     let version_made_by = options.system.update_version_needed(VERSION_MADE_BY);
 
-    let mut extended_timestamp_data = ArchiveDescriptor::new(9);
-
     let mut extra_fields: Vec<Box<dyn ExtraFields>> = Vec::new();
 
     if options.last_modified_time.extended_timestamp() {
@@ -70,11 +67,12 @@ pub fn build_file_header(
         extra_fields.push(Box::new(ts));
     }
 
+    let mut extended_data_buffer = ArchiveDescriptor::new(9);
     for extra_field in &extra_fields {
-        extra_field.file_header_write_data(&mut extended_timestamp_data)
+        extra_field.file_header_write_data(&mut extended_data_buffer)
     }
 
-    let extra_field_length = extended_timestamp_data.len() as u16;
+    let extra_field_length = extended_data_buffer.len() as u16;
 
     let compression_method = compressor.zip_code();
     let mut file_header = ArchiveDescriptor::new(FILE_HEADER_BASE_SIZE + file_name_len as u64);
@@ -90,7 +88,7 @@ pub fn build_file_header(
     file_header.write_u16(file_name_len); // file name length
     file_header.write_u16(extra_field_length); //extra field length
     file_header.write_bytes(&file_name_as_bytes_own);
-    file_header.write_bytes(extended_timestamp_data.bytes());
+    file_header.write_bytes(extended_data_buffer.bytes());
 
     let archive_file_entry = ArchiveFileEntry {
         version_made_by,
@@ -211,7 +209,7 @@ pub struct SubZipArchiveData {
     pub base_flags: u16,
 }
 
-impl<'a> SubZipArchiveData {
+impl SubZipArchiveData {
     pub fn set_archive_comment(&mut self, comment: &str) {
         self.central_directory_end.set_archive_comment(comment)
     }
@@ -442,17 +440,14 @@ impl CentralDirectoryEnd {
     }
 }
 
-pub trait ExtraFields {
+pub trait ExtraFields: Debug + Send + Sync {
     fn file_header_extra_field_size(&self) -> u16;
     fn central_header_extra_field_size(&self) -> u16;
     fn file_header_write_data(&self, archive_descriptor: &mut ArchiveDescriptor);
     fn central_header_extra_write_data(&self, archive_descriptor: &mut ArchiveDescriptor);
-}
 
-impl Debug for dyn ExtraFields {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.fmt(f)
-    }
+    fn parse_file_header_data(&self, stream: &[u8]);
+    fn parse_header_extra_data(&self, stream: &[u8]);
 }
 
 //The central-directory extra field contains:
@@ -563,10 +558,32 @@ impl ExtraFields for ExtendedTimestamp {
     }
 
     fn file_header_write_data(&self, archive_descriptor: &mut ArchiveDescriptor) {
-        todo!()
+        self.central_header_extra_write_data(archive_descriptor);
+
+        if let Some(access_time) = self.access_time {
+            archive_descriptor.write_i32(access_time);
+        }
+
+        if let Some(create_time) = self.create_time {
+            archive_descriptor.write_i32(create_time);
+        }
     }
 
     fn central_header_extra_write_data(&self, archive_descriptor: &mut ArchiveDescriptor) {
+        archive_descriptor.write_u16(X5455_EXTENDEDTIMESTAMP);
+        archive_descriptor.write_u16(self.file_header_extra_field_data_size());
+        archive_descriptor.write_u8(self.flags); //     The bit set inside the flags by when the last modification time is present in this extra field.
+
+        if let Some(modify_time) = self.modify_time {
+            archive_descriptor.write_i32(modify_time);
+        }
+    }
+
+    fn parse_file_header_data(&self, _stream: &[u8]) {
+        todo!()
+    }
+
+    fn parse_header_extra_data(&self, _stream: &[u8]) {
         todo!()
     }
 }
