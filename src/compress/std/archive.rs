@@ -2,14 +2,13 @@ use super::compressor::compress;
 use super::write_wrapper::{CommonWrapper, WriteSeekWrapper, WriteWrapper};
 
 use crate::archive_common::{
-    build_central_directory_end, build_central_directory_file_header, build_file_header, set_sizes,
-    ArchiveDescriptor, SubZipArchiveData, ZipArchiveCommon,
+    build_central_directory_end, build_central_directory_file_header, build_data_descriptor,
+    build_file_header, ArchiveDescriptor, SubZipArchiveData, ZipArchiveCommon,
 };
 use crate::compress::FileOptions;
 use crate::compression::Level;
 use crate::constants::{
-    CENTRAL_DIRECTORY_ENTRY_BASE_SIZE, DATA_DESCRIPTOR_SIGNATURE, DESCRIPTOR_SIZE,
-    EXTENDED_LOCAL_HEADER_FLAG, FILE_HEADER_CRC_OFFSET,
+    CENTRAL_DIRECTORY_ENTRY_BASE_SIZE, EXTENDED_LOCAL_HEADER_FLAG, FILE_HEADER_CRC_OFFSET,
 };
 use crate::error::ArchiveError;
 use crc32fast::Hasher;
@@ -107,8 +106,8 @@ impl<'a, W: Write + 'a> ZipArchive<'a, W> {
             file_name,
             options,
             compressor,
-            file_header_offset as u32,
-            self.data.base_flags,
+            file_header_offset,
+            &self.data,
         );
 
         self.sink.write_all(file_header.buffer())?;
@@ -132,22 +131,14 @@ impl<'a, W: Write + 'a> ZipArchive<'a, W> {
         archive_file_entry.uncompressed_size = uncompressed_size;
 
         if self.data.base_flags & EXTENDED_LOCAL_HEADER_FLAG != 0 {
-            let mut file_descriptor = ArchiveDescriptor::new(DESCRIPTOR_SIZE);
-            file_descriptor.write_u32(DATA_DESCRIPTOR_SIGNATURE);
-            set_sizes(
-                &mut file_descriptor,
-                crc32,
-                compressed_size,
-                uncompressed_size,
-            );
+            let data_descriptor = build_data_descriptor(crc32, compressed_size, uncompressed_size);
+            self.sink.write_all(data_descriptor.buffer())?;
         } else {
             let mut file_descriptor = ArchiveDescriptor::new(3 * 4);
-            set_sizes(
-                &mut file_descriptor,
-                crc32,
-                compressed_size,
-                uncompressed_size,
-            );
+
+            file_descriptor.write_u32(crc32);
+            file_descriptor.write_u32(compressed_size as u32);
+            file_descriptor.write_u32(uncompressed_size as u32);
 
             //position in the the file header
             self.sink
@@ -158,7 +149,7 @@ impl<'a, W: Write + 'a> ZipArchive<'a, W> {
             //position back at the end
             self.sink.seek(SeekFrom::Start(archive_size))?;
         }
-        self.data.files_info.push(archive_file_entry);
+        self.data.add_archive_file_entry(archive_file_entry);
 
         self.data.archive_size = self.sink.get_written_bytes_count()?;
 
@@ -172,12 +163,12 @@ impl<'a, W: Write + 'a> ZipArchive<'a, W> {
     where
         W: Write,
     {
-        let central_directory_offset = self.sink.get_written_bytes_count()? as u32;
+        let central_directory_offset = self.sink.get_written_bytes_count()?;
 
         let mut central_directory_header =
             ArchiveDescriptor::new(CENTRAL_DIRECTORY_ENTRY_BASE_SIZE + 200);
 
-        for file_info in &self.data.files_info {
+        for file_info in self.data.iter() {
             build_central_directory_file_header(&mut central_directory_header, file_info);
 
             self.sink.write_all(central_directory_header.buffer())?;
@@ -185,7 +176,7 @@ impl<'a, W: Write + 'a> ZipArchive<'a, W> {
         }
 
         let current_archive_size = self.sink.get_written_bytes_count()?;
-        let central_directory_size: u32 = current_archive_size as u32 - central_directory_offset;
+        let central_directory_size: u64 = current_archive_size - central_directory_offset;
 
         let end_of_central_directory = build_central_directory_end(
             &mut self.data,

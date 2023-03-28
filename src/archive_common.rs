@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 use std::fmt::Debug;
 use std::str;
 use std::u32;
@@ -9,11 +8,14 @@ use super::compression::CompressionMethod;
 use crate::compress::FileOptions;
 use crate::constants::CENTRAL_DIRECTORY_END_SIGNATURE;
 use crate::constants::CENTRAL_DIRECTORY_ENTRY_SIGNATURE;
-use crate::constants::END_OF_CENTRAL_DIRECTORY_SIZE;
+use crate::constants::DATA_DESCRIPTOR_SIGNATURE;
 use crate::constants::FILE_HEADER_BASE_SIZE;
 use crate::constants::LOCAL_FILE_HEADER_SIGNATURE;
 use crate::constants::VERSION_MADE_BY;
 use crate::constants::X5455_EXTENDEDTIMESTAMP;
+use crate::constants::ZIP64_CENTRAL_DIRECTORY_END_SIGNATURE;
+use crate::constants::ZIP64_DESCRIPTOR_SIZE;
+use crate::constants::ZIP64_END_OF_CENTRAL_DIR_LOCATOR_SIGNATURE;
 use crate::error::ArchiveError;
 use crate::types::ArchiveFileEntry;
 
@@ -31,15 +33,15 @@ pub fn build_file_header(
     file_name: &str,
     options: &FileOptions,
     compressor: CompressionMethod,
-    offset: u32,
-    base_flags: u16,
+    offset: u64,
+    data: &SubZipArchiveData,
 ) -> (ArchiveDescriptor, ArchiveFileEntry) {
     let file_nameas_bytes = file_name.as_bytes();
     let file_name_as_bytes_own = file_nameas_bytes.to_owned();
     let file_name_len = file_name_as_bytes_own.len() as u16;
 
     let (date, time) = options.last_modified_time.ms_dos();
-    let mut general_purpose_flags: u16 = base_flags;
+    let mut general_purpose_flags: u16 = data.base_flags;
     if file_name_as_bytes_own.len() > file_name.len() {
         general_purpose_flags |= 1 << 11; //set utf8 flag
     }
@@ -61,6 +63,11 @@ pub fn build_file_header(
     let version_made_by = options.system.update_version_needed(VERSION_MADE_BY);
 
     let mut extra_fields: Vec<Box<dyn ExtraFields>> = Vec::new();
+
+    if data.is_big_archive() {
+        let ts = ZIP64ExtendedInformationExtraField::new(0, 0, 0, 0);
+        extra_fields.push(Box::new(ts));
+    }
 
     if options.last_modified_time.extended_timestamp() {
         let ts = ExtendedTimestamp::new(Some(options.last_modified_time.timestamp()), None, None);
@@ -135,7 +142,7 @@ pub fn build_central_directory_file_header(
     central_directory_header.write_u16(0u16); // File's Disk number.
     central_directory_header.write_u16(0u16); // Internal file attributes.
     central_directory_header.write_u32((0o100644 << 16) as u32); // External file attributes (regular file / rw-r--r--).
-    central_directory_header.write_u32(file_info.offset); // Offset from start of file to local file header.
+    central_directory_header.write_u32(file_info.offset as u32); // Offset from start of file to local file header.
     central_directory_header.write_bytes(&file_info.file_name_as_bytes); // Filename.
 
     let mut extra_field_buffer = ArchiveDescriptor::new(file_info.extra_field_length as u64);
@@ -151,67 +158,95 @@ pub fn build_central_directory_file_header(
     }
 }
 
-pub fn set_sizes(
-    file_descriptor: &mut ArchiveDescriptor,
+pub fn build_data_descriptor(
     crc32: u32,
     compressed_size: u64,
     uncompressed_size: u64,
-) {
+) -> ArchiveDescriptor {
+    let mut file_descriptor = ArchiveDescriptor::new(ZIP64_DESCRIPTOR_SIZE);
+    file_descriptor.write_u32(DATA_DESCRIPTOR_SIGNATURE); //This is optional
     file_descriptor.write_u32(crc32);
-    file_descriptor.write_u32(compressed_size as u32);
-    file_descriptor.write_u32(uncompressed_size as u32);
+
+    if compressed_size >= u32::MAX as u64 {
+        file_descriptor.write_u64(compressed_size);
+    } else {
+        file_descriptor.write_u32(compressed_size as u32);
+    }
+
+    if uncompressed_size >= u32::MAX as u64 {
+        file_descriptor.write_u64(uncompressed_size);
+    } else {
+        file_descriptor.write_u32(uncompressed_size as u32);
+    }
+
+    file_descriptor
 }
 
 pub fn build_central_directory_end(
     data: &mut SubZipArchiveData,
-    central_directory_offset: u32,
-    central_directory_size: u32,
+    central_directory_offset: u64,
+    central_directory_size: u64,
 ) -> ArchiveDescriptor {
-    data.central_directory_end.disk_number = 0;
-    data.central_directory_end.disk_with_central_directory = 0;
+    data.central_directory_end.number_of_this_disk = 0;
     data.central_directory_end
-        .total_number_of_entries_on_this_disk = data.files_info.len() as u16;
-    data.central_directory_end.total_number_of_entries = data.files_info.len() as u16;
+        .number_of_the_disk_with_central_directory = 0;
+    data.central_directory_end
+        .total_number_of_entries_on_this_disk = data.files_info.len() as u64;
+    data.central_directory_end
+        .total_number_of_entries_in_the_central_directory = data.files_info.len() as u64;
     data.central_directory_end.central_directory_size = central_directory_size;
     data.central_directory_end
         .offset_of_start_of_central_directory = central_directory_offset;
 
-    let mut end_of_central_directory = ArchiveDescriptor::new(END_OF_CENTRAL_DIRECTORY_SIZE);
-    end_of_central_directory.write_u32(CENTRAL_DIRECTORY_END_SIGNATURE);
-    end_of_central_directory.write_u16(data.central_directory_end.disk_number);
-    end_of_central_directory.write_u16(data.central_directory_end.disk_with_central_directory);
-    end_of_central_directory.write_u16(
-        data.central_directory_end
-            .total_number_of_entries_on_this_disk,
-    );
-    end_of_central_directory.write_u16(data.central_directory_end.total_number_of_entries);
-    end_of_central_directory.write_u32(data.central_directory_end.central_directory_size);
-    end_of_central_directory.write_u32(
-        data.central_directory_end
-            .offset_of_start_of_central_directory,
-    );
+    let mut end_of_central_directory = ArchiveDescriptor::new(500); //TODO calculate capacity size
 
-    if let Some(comment) = &data.central_directory_end.archive_comment {
-        end_of_central_directory.write_u16(comment.len() as u16);
-        end_of_central_directory.write_bytes(comment);
-    } else {
-        end_of_central_directory.write_u16(0);
+    if data.is_big_archive() {
+        //[zip64 end of central directory record]
+
+        data.central_directory_end
+            .create_zip64_end_of_central_directory_record(&mut end_of_central_directory);
+        //------------------------------------------------
+        //[zip64 end of central directory locator]
+        //------------------------------------------------
+        data.central_directory_end
+            .create_end_of_central_directory_locator(&mut end_of_central_directory);
     }
+
+    //4.4.1.5  The end of central directory record and the Zip64 end
+    //of central directory locator record MUST reside on the same
+    //disk when splitting or spanning an archive.
+
+    data.central_directory_end
+        .create_end_of_central_directory(&mut end_of_central_directory);
 
     end_of_central_directory
 }
 
 #[derive(Debug, Default)]
 pub struct SubZipArchiveData {
-    pub files_info: Vec<ArchiveFileEntry>,
+    files_info: Vec<ArchiveFileEntry>,
     central_directory_end: CentralDirectoryEnd,
     pub archive_size: u64,
     pub base_flags: u16,
+    is_big_archive: bool,
 }
 
 impl SubZipArchiveData {
     pub fn set_archive_comment(&mut self, comment: &str) {
         self.central_directory_end.set_archive_comment(comment)
+    }
+
+    pub fn is_big_archive(&self) -> bool {
+        self.is_big_archive || self.central_directory_end.needs_zip64_format_extensions()
+    }
+
+    pub fn add_archive_file_entry(&mut self, archive_file_entry: ArchiveFileEntry) {
+        self.is_big_archive |= archive_file_entry.is_zip64();
+        self.files_info.push(archive_file_entry)
+    }
+
+    pub fn iter(&mut self) -> std::slice::Iter<'_, ArchiveFileEntry> {
+        self.files_info.iter()
     }
 }
 
@@ -240,6 +275,10 @@ impl ArchiveDescriptor {
     }
 
     pub fn write_i32(&mut self, val: i32) {
+        self.buffer.extend_from_slice(&val.to_le_bytes());
+    }
+
+    pub fn write_u64(&mut self, val: u64) {
         self.buffer.extend_from_slice(&val.to_le_bytes());
     }
 
@@ -412,12 +451,15 @@ impl ArchiveDescriptorReader {
 }
 #[derive(Debug, Default)]
 pub struct CentralDirectoryEnd {
-    pub disk_number: u16,
-    pub disk_with_central_directory: u16,
-    pub total_number_of_entries_on_this_disk: u16,
-    pub total_number_of_entries: u16,
-    pub central_directory_size: u32,
-    pub offset_of_start_of_central_directory: u32,
+    pub number_of_this_disk: u32,
+    pub number_of_the_disk_with_central_directory: u32,
+    pub total_number_of_entries_on_this_disk: u64,
+    pub total_number_of_entries_in_the_central_directory: u64,
+    pub central_directory_size: u64,
+    pub offset_of_start_of_central_directory: u64,
+    pub z64ecdl_number_of_the_disk_with_the_start_of_the_zip64_end_of_central_directory: u32,
+    pub z64ecdl_relative_offset_of_the_zip64_end_of_central_directory_record: u64,
+    pub z64ecdl_total_number_of_disks: u32,
     pub archive_comment: Option<Vec<u8>>,
 }
 
@@ -438,6 +480,81 @@ impl CentralDirectoryEnd {
         let len = std::cmp::min(bytes.len(), u16::MAX as usize);
         self.archive_comment = Some(bytes[0..len].to_owned());
     }
+
+    // Per spec 4.4.1.4 - a CentralDirectoryEnd field might be insufficient to hold the
+    // required data. In this case the file SHOULD contain a ZIP64 format record
+    // and the field of this record will be set to -1
+    pub fn needs_zip64_format_extensions(&self) -> bool {
+        self.number_of_this_disk == 0xFFFF
+            || self.number_of_the_disk_with_central_directory == 0xFFFF
+            || self.total_number_of_entries_on_this_disk >= u16::MAX as u64
+            || self.total_number_of_entries_in_the_central_directory >= u16::MAX as u64
+            || self.central_directory_size >= u32::MAX as u64
+            || self.offset_of_start_of_central_directory >= u32::MAX as u64
+    }
+
+    pub fn create_zip64_end_of_central_directory_record(
+        &self,
+        end_of_central_directory: &mut ArchiveDescriptor,
+    ) {
+        const SIZE_OF_THE_EOCD64_MINUS_12: u64 = 44;
+        const VERSION_MADE_BY: u16 = 46;
+        const MINIMUM_VERSION_NEEDED_TO_EXTRACT: u16 = 46;
+
+        end_of_central_directory.write_u32(ZIP64_CENTRAL_DIRECTORY_END_SIGNATURE);
+        end_of_central_directory.write_u64(SIZE_OF_THE_EOCD64_MINUS_12);
+        end_of_central_directory.write_u16(VERSION_MADE_BY);
+        end_of_central_directory.write_u16(MINIMUM_VERSION_NEEDED_TO_EXTRACT);
+        end_of_central_directory.write_u32(self.number_of_this_disk);
+        end_of_central_directory.write_u32(self.number_of_the_disk_with_central_directory);
+        end_of_central_directory.write_u64(self.total_number_of_entries_on_this_disk);
+        end_of_central_directory.write_u64(self.total_number_of_entries_in_the_central_directory);
+        end_of_central_directory.write_u64(self.central_directory_size);
+        end_of_central_directory.write_u64(self.offset_of_start_of_central_directory);
+    }
+
+    pub fn create_end_of_central_directory_locator(
+        &mut self,
+        end_of_central_directory: &mut ArchiveDescriptor,
+    ) {
+        self.z64ecdl_relative_offset_of_the_zip64_end_of_central_directory_record =
+            self.offset_of_start_of_central_directory + self.central_directory_size;
+
+        end_of_central_directory.write_u32(ZIP64_END_OF_CENTRAL_DIR_LOCATOR_SIGNATURE);
+        end_of_central_directory.write_u32(
+            self.z64ecdl_number_of_the_disk_with_the_start_of_the_zip64_end_of_central_directory,
+        );
+        end_of_central_directory
+            .write_u64(self.z64ecdl_relative_offset_of_the_zip64_end_of_central_directory_record);
+        end_of_central_directory.write_u32(self.z64ecdl_total_number_of_disks);
+    }
+
+    fn create_end_of_central_directory(&self, end_of_central_directory: &mut ArchiveDescriptor) {
+        end_of_central_directory.write_u32(CENTRAL_DIRECTORY_END_SIGNATURE);
+        end_of_central_directory.write_u16(self.number_of_this_disk.min(u16::MAX as u32) as u16);
+        end_of_central_directory.write_u16(
+            self.number_of_the_disk_with_central_directory
+                .min(u16::MAX as u32) as u16,
+        );
+        end_of_central_directory.write_u16(self.total_number_of_entries_on_this_disk as u16);
+        end_of_central_directory.write_u16(
+            self.total_number_of_entries_in_the_central_directory
+                .min(u16::MAX as u64) as u16,
+        );
+
+        end_of_central_directory.write_u32(self.central_directory_size.min(u32::MAX as u64) as u32);
+        end_of_central_directory.write_u32(
+            self.offset_of_start_of_central_directory
+                .min(u32::MAX as u64) as u32,
+        );
+
+        if let Some(comment) = &self.archive_comment {
+            end_of_central_directory.write_u16(comment.len() as u16);
+            end_of_central_directory.write_bytes(comment);
+        } else {
+            end_of_central_directory.write_u16(0);
+        };
+    }
 }
 
 pub trait ExtraFields: Debug + Send + Sync {
@@ -456,6 +573,16 @@ pub trait ExtraFields: Debug + Send + Sync {
 //- A subfield with ID 0x7875 (Unix UID/GID (any size)) and 11 data bytes:
 //  01 04 e8 03 00 00 04 e8 03 00 00.
 
+///
+/// The time values are in standard Unix signed-long format, indicating
+/// the number of seconds since 1 January 1970 00:00:00.  The times
+/// are relative to Coordinated Universal Time (UTC), also sometimes
+/// referred to as Greenwich Mean Time (GMT).  To convert to local time,
+/// the software must know the local timezone offset from UTC/GMT.
+///
+/// Use the field definition given in Info-Zip's source archive: zip-3.0.tar.gz/proginfo/extrafld.txt.
+/// It can be found here (https://github.com/LuaDist/zip/blob/master/proginfo/extrafld.txt)
+///
 #[derive(Debug, Default)]
 struct ExtendedTimestamp {
     create_time: Option<i32>,
@@ -514,25 +641,6 @@ impl ExtendedTimestamp {
         }
     }
 
-    fn fill_data(&self, mut archive_descriptor: ArchiveDescriptor) {
-        let mut extended_timestamp_data = ArchiveDescriptor::new(9);
-        archive_descriptor.write_u16(X5455_EXTENDEDTIMESTAMP);
-        archive_descriptor.write_u16(self.file_header_extra_field_data_size());
-        archive_descriptor.write_u8(self.flags); //     The bit set inside the flags by when the last modification time is present in this extra field.
-
-        if let Some(modify_time) = self.modify_time {
-            extended_timestamp_data.write_i32(modify_time);
-        }
-
-        if let Some(access_time) = self.access_time {
-            extended_timestamp_data.write_i32(access_time);
-        }
-
-        if let Some(create_time) = self.create_time {
-            extended_timestamp_data.write_i32(create_time);
-        }
-    }
-
     fn file_header_extra_field_data_size(&self) -> u16 {
         let mut size: u16 = 1; //for flags
         size += (self.flags.count_ones() * 4) as u16;
@@ -544,8 +652,6 @@ impl ExtendedTimestamp {
         size += ((self.flags & ExtendedTimestamp::MODIFY_TIME_BIT).count_ones() * 4) as u16;
         size
     }
-
-    fn get_flags() {}
 }
 
 impl ExtraFields for ExtendedTimestamp {
@@ -581,6 +687,88 @@ impl ExtraFields for ExtendedTimestamp {
 
     fn parse_file_header_data(&self, _stream: &[u8]) {
         todo!()
+    }
+
+    fn parse_header_extra_data(&self, _stream: &[u8]) {
+        todo!()
+    }
+}
+
+/// The following is the layout of the ZIP64 extended
+/// information "extra" block. If one of the size or
+/// offset fields in the Local or Central directory
+/// record is too small to hold the required data,
+/// a ZIP64 extended information record is created.
+/// The order of the fields in the ZIP64 extended
+/// information record is fixed, but the fields will
+/// only appear if the corresponding Local or Central
+/// directory record field is set to 0xFFFF or 0xFFFFFFFF.
+///
+/// If one entry does not fit into the classic LOC or CEN record, only that entry is required to be moved into a ZIP64 extra field. The other entries may stay in the classic record. Therefore, not all entries shown in the following table might be stored in a ZIP64 extra field. However, if they appear, their order must be as shown in the table.
+///
+/// Note: all fields stored in Intel low-byte/high-byte order.
+#[derive(Debug)]
+struct ZIP64ExtendedInformationExtraField {
+    original_size: u64,
+    compressed_size: u64,
+    relative_header_offset: u64,
+    disk_start_number: u32,
+    extra_field_size: u16,
+}
+
+impl ZIP64ExtendedInformationExtraField {
+    const ZIP64_TAG: u16 = 0x0001;
+    const ZIP64_EXTRA_FIELD_SIZE: u16 = 8 * 3 + 4;
+    fn new(
+        original_size: u64,
+        compressed_size: u64,
+        relative_header_offset: u64,
+        disk_start_number: u32,
+    ) -> Self {
+        Self {
+            original_size,
+            compressed_size,
+            relative_header_offset,
+            disk_start_number,
+            extra_field_size: 0,
+        }
+    }
+}
+
+impl ExtraFields for ZIP64ExtendedInformationExtraField {
+    fn file_header_extra_field_size(&self) -> u16 {
+        todo!()
+    }
+
+    fn central_header_extra_field_size(&self) -> u16 {
+        todo!()
+    }
+
+    fn file_header_write_data(&self, archive_descriptor: &mut ArchiveDescriptor) {
+        self.central_header_extra_write_data(archive_descriptor);
+    }
+
+    fn central_header_extra_write_data(&self, archive_descriptor: &mut ArchiveDescriptor) {
+        archive_descriptor.write_u16(ZIP64ExtendedInformationExtraField::ZIP64_TAG);
+        archive_descriptor.write_u16(
+            ZIP64ExtendedInformationExtraField::ZIP64_EXTRA_FIELD_SIZE.min(self.extra_field_size),
+        );
+
+        archive_descriptor.write_u64(self.original_size);
+
+        if self.extra_field_size >= 16 {
+            archive_descriptor.write_u64(self.compressed_size);
+            if self.extra_field_size >= 24 {
+                archive_descriptor.write_u64(self.relative_header_offset);
+                if self.extra_field_size >= 28 {
+                    archive_descriptor.write_u32(self.disk_start_number);
+                }
+            }
+        }
+    }
+
+    fn parse_file_header_data(&self, stream: &[u8]) {
+        self.parse_header_extra_data(stream);
     }
 
     fn parse_header_extra_data(&self, _stream: &[u8]) {

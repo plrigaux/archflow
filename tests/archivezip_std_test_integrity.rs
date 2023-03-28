@@ -46,13 +46,17 @@ fn archive_multiple() -> Result<(), ArchiveError> {
     //test files
 
     assert_eq!(
-        archive_read.central_directory_end.total_number_of_entries,
+        archive_read
+            .central_directory_end
+            .total_number_of_entries_in_the_central_directory,
         3
     );
 
     assert_eq!(
-        archive_read.central_directory_end.total_number_of_entries,
-        archive_read.file_entries.len() as u16
+        archive_read
+            .central_directory_end
+            .total_number_of_entries_in_the_central_directory,
+        archive_read.file_entries.len() as u64
     );
 
     let mut iter = archive_read.file_entries.iter();

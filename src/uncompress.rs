@@ -106,7 +106,7 @@ impl<R: Read + Seek> ArchiveReader<R> {
         reader: &mut R,
     ) -> Result<Vec<ArchiveFileEntry>, ArchiveError> {
         reader.seek(SeekFrom::Start(
-            central_directory_end.offset_of_start_of_central_directory as u64,
+            central_directory_end.offset_of_start_of_central_directory,
         ))?;
 
         let mut central_directory_buffer: Vec<u8> =
@@ -141,7 +141,7 @@ impl<R: Read + Seek> ArchiveReader<R> {
             let file_disk_number = indexer.read_u16(&central_directory_buffer); // File's Disk number.
             let internal_file_attributes = indexer.read_u16(&central_directory_buffer); // Internal file attributes.
             let external_file_attributes = indexer.read_u32(&central_directory_buffer); // External file attributes (regular file / rw-r--r--).
-            let file_info_offset = indexer.read_u32(&central_directory_buffer);
+            let file_info_offset = indexer.read_u32(&central_directory_buffer) as u64;
             let file_name_as_bytes =
                 indexer.read_bytes(&central_directory_buffer, file_name_len as usize);
 
@@ -206,10 +206,10 @@ impl<R: Read + Seek> ArchiveReader<R> {
         let mut indexer = ArchiveDescriptorReader::new();
 
         //let _signature = indexer.read_u32(stream);
-        let disk_number = indexer.read_u16(stream);
-        let disk_with_central_directory = indexer.read_u16(stream);
-        let total_number_of_entries_on_this_disk = indexer.read_u16(stream);
-        let total_number_of_entries = indexer.read_u16(stream);
+        let disk_number = indexer.read_u16(stream) as u32;
+        let disk_with_central_directory = indexer.read_u16(stream) as u32;
+        let total_number_of_entries_on_this_disk = indexer.read_u16(stream) as u64;
+        let total_number_of_entries_in_the_central_directory = indexer.read_u16(stream);
         let central_directory_size = indexer.read_u32(stream);
         let offset_of_start_of_central_directory = indexer.read_u32(stream);
         let zip_file_comment_length = indexer.read_u16(stream);
@@ -217,13 +217,17 @@ impl<R: Read + Seek> ArchiveReader<R> {
         let archive_comment = indexer.read_bytes(stream, zip_file_comment_length as usize);
 
         let central_directory_end = CentralDirectoryEnd {
-            disk_number,
-            disk_with_central_directory,
+            number_of_this_disk: disk_number,
+            number_of_the_disk_with_central_directory: disk_with_central_directory,
             total_number_of_entries_on_this_disk,
-            total_number_of_entries,
-            central_directory_size,
-            offset_of_start_of_central_directory,
+            total_number_of_entries_in_the_central_directory:
+                total_number_of_entries_in_the_central_directory as u64,
+            central_directory_size: central_directory_size as u64,
+            offset_of_start_of_central_directory: offset_of_start_of_central_directory as u64,
             archive_comment: Some(archive_comment),
+            z64ecdl_relative_offset_of_the_zip64_end_of_central_directory_record: 0,
+            z64ecdl_total_number_of_disks: 1,
+            z64ecdl_number_of_the_disk_with_the_start_of_the_zip64_end_of_central_directory: 0,
         };
 
         Ok(central_directory_end)

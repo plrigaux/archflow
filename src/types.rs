@@ -22,7 +22,7 @@ pub struct ArchiveFileEntry {
     pub file_name_len: u16,
     pub extra_field_length: u16,
     pub file_name_as_bytes: Vec<u8>,
-    pub offset: u32,
+    pub offset: u64,
     pub compressor: CompressionMethod,
     pub file_disk_number: u16,
     pub internal_file_attributes: u16,
@@ -71,6 +71,10 @@ impl ArchiveFileEntry {
 
     pub fn get_file_name(&self) -> String {
         String::from_utf8_lossy(&self.file_name_as_bytes).to_string()
+    }
+
+    pub fn is_zip64(&self) -> bool {
+        self.uncompressed_size >= u32::MAX as u64
     }
 }
 
