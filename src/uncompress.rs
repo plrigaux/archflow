@@ -181,7 +181,7 @@ impl<R: Read + Seek> ArchiveReader<R> {
                 compressor,
                 internal_file_attributes,
                 external_file_attributes,
-                file_disk_number,
+                file_disk_number: file_disk_number as u32,
                 extra_fields,
                 file_comment,
             };

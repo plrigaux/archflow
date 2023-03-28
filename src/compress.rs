@@ -1,3 +1,56 @@
+//!
+//!
+//!
+//!
+//!
+//!
+//!
+//!
+//! This table shows the interpretation of the archive structure.
+//!
+//! <table>
+//! <tr><th>Archive structure</th>
+//!
+//! <td>Local file header</td>
+//! <td>Central directory file header</td>
+//! <td>End of central directory record</td>
+//! </tr>
+//! <tr><th>Stream</th>
+//! <td>
+//! <p>Uncompress size set to 0xFFFFFFFF if >= u32::MAX</p>
+//! <p>Compress size set to 0xFFFFFFFF if >= u32::MAX</p>
+//! <p>ZIP64 Extra Field: No </p>
+//! <p>Data Descriptor : ZIP64 format if Uncompress or Compress size >= u32::MAX</p>
+//! </td>
+//! <td rowspan=2>
+//! <p>Uncompress size set to 0xFFFFFFFF if >= u32::MAX</p>
+//! <p>Compress size set to 0xFFFFFFFF if >= u32::MAX</p>
+//! <p>ZIP64 Extra Field: Yes (if Uncompress or Compress size >= u32::MAX)</p>
+//! </td>
+//! <td rowspan=2>
+//! <p>Zip64 format if
+//! <ul>
+//! <li>Number of entry >= u16::MAX OR</li>
+//! <li>Archive size >= u32::MAX OR</li>
+//! <li>A file size >= u32::MAX OR</li>
+//! </ul>
+//! </p>
+//! </td>
+//! </tr>
+//! <tr><th>Normal</th>
+//! <td>
+//! <p>uncompress size set to 0xFFFFFFFF if size > u32::MAX</p>
+//! <p>compress size set to 0xFFFFFFFF if size > u32::MAX</p>
+//! <p>ZIP64 Extra Field: Yes (if Uncompress or Compress size >= u32::MAX)</p>
+//! <p>Data Descriptor : N/A </p>
+//! </td>
+
+//! </tr>
+//! </table>
+//!
+//!
+//!
+
 #[cfg(feature = "std")]
 pub mod std;
 #[cfg(feature = "tokio")]
@@ -28,6 +81,9 @@ pub struct FileOptions<'a> {
 
     /// File comment.
     pub comment: Option<&'a str>,
+
+    /// Indicator of fize size > (u32::MAX)
+    pub large_file: bool,
 }
 
 impl<'a> FileOptions<'a> {
@@ -73,6 +129,17 @@ impl<'a> FileOptions<'a> {
         self.comment = Some(comment);
         self
     }
+
+    /// Set whether the new file's compressed and uncompressed size is less than 4 GiB.
+    ///
+    /// If set to `false` and the file exceeds the limit, an I/O error is thrown. If set to `true`,
+    /// readers will require ZIP64 support and if the file does not exceed the limit, 20 B are
+    /// wasted. The default is `false`.
+    #[must_use]
+    pub fn large_file(mut self, large: bool) -> FileOptions<'a> {
+        self.large_file = large;
+        self
+    }
 }
 
 impl<'a> Default for FileOptions<'a> {
@@ -85,6 +152,19 @@ impl<'a> Default for FileOptions<'a> {
             permissions: None,
             system: FileCompatibilitySystem::Unix,
             comment: None,
+            large_file: false,
         }
     }
+}
+
+pub enum ZipArchiveType {
+    /// All file descriptor will be in Zip64 format.
+    /// The archive will have a Zip64 ending
+    Force64,
+
+    ///All file descriptor will be in Zip32 (original )format. It will raise an error if the archive or its components are too large
+    Force32,
+
+    ///The archive will detetect automaticatlly if zip64 format applies
+    Auto,
 }

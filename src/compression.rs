@@ -9,6 +9,7 @@ pub const LZMA: u16 = 14;
 pub const ZSTD: u16 = 93;
 pub const XZ: u16 = 95;
 
+/// Provides the comtession methods supported for a ZipArchive
 #[derive(Debug, Clone, Copy)]
 pub enum CompressionMethod {
     Store(),

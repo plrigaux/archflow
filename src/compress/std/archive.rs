@@ -3,13 +3,12 @@ use super::write_wrapper::{CommonWrapper, WriteSeekWrapper, WriteWrapper};
 
 use crate::archive_common::{
     build_central_directory_end, build_central_directory_file_header, build_data_descriptor,
-    build_file_header, ArchiveDescriptor, SubZipArchiveData, ZipArchiveCommon,
+    build_file_header, build_file_sizes_update, ArchiveDescriptor, SubZipArchiveData,
+    ZIP64ExtendedInformationExtraField, ZipArchiveCommon,
 };
 use crate::compress::FileOptions;
 use crate::compression::Level;
-use crate::constants::{
-    CENTRAL_DIRECTORY_ENTRY_BASE_SIZE, EXTENDED_LOCAL_HEADER_FLAG, FILE_HEADER_CRC_OFFSET,
-};
+use crate::constants::{EXTENDED_LOCAL_HEADER_FLAG, FILE_HEADER_BASE_SIZE, FILE_HEADER_CRC_OFFSET};
 use crate::error::ArchiveError;
 use crc32fast::Hasher;
 use std::io::{Read, Seek, SeekFrom, Write};
@@ -102,7 +101,7 @@ impl<'a, W: Write + 'a> ZipArchive<'a, W> {
         let mut hasher = Hasher::new();
         let compressor = options.compression_method;
 
-        let (file_header, mut archive_file_entry) = build_file_header(
+        let (file_header, mut archive_file_entry, zip_extra_offset) = build_file_header(
             file_name,
             options,
             compressor,
@@ -131,24 +130,46 @@ impl<'a, W: Write + 'a> ZipArchive<'a, W> {
         archive_file_entry.uncompressed_size = uncompressed_size;
 
         if self.data.base_flags & EXTENDED_LOCAL_HEADER_FLAG != 0 {
-            let data_descriptor = build_data_descriptor(crc32, compressed_size, uncompressed_size);
+            let data_descriptor = build_data_descriptor(&archive_file_entry);
             self.sink.write_all(data_descriptor.buffer())?;
         } else {
-            let mut file_descriptor = ArchiveDescriptor::new(3 * 4);
-
-            file_descriptor.write_u32(crc32);
-            file_descriptor.write_u32(compressed_size as u32);
-            file_descriptor.write_u32(uncompressed_size as u32);
+            let sizes_update = build_file_sizes_update(&archive_file_entry);
 
             //position in the the file header
             self.sink
                 .seek(SeekFrom::Start(file_header_offset + FILE_HEADER_CRC_OFFSET))?;
 
-            self.sink.write_all(file_descriptor.buffer())?;
+            self.sink.write_all(sizes_update.buffer())?;
 
             //position back at the end
             self.sink.seek(SeekFrom::Start(archive_size))?;
+
+            if archive_file_entry.is_zip64() {
+                if options.large_file {
+                    if let Some(zip64_extra_field) = archive_file_entry.extra_fields.last() {
+                        let mut file_descriptor = ArchiveDescriptor::new(30);
+                        zip64_extra_field
+                            .file_header_write_data(&mut file_descriptor, &archive_file_entry);
+
+                        self.sink.seek(SeekFrom::Start(
+                            file_header_offset + FILE_HEADER_BASE_SIZE + zip_extra_offset,
+                        ))?;
+
+                        self.sink.write_all(file_descriptor.buffer())?;
+                        //position back at the end
+                        self.sink.seek(SeekFrom::Start(archive_size))?;
+                    }
+                }
+            } else {
+                //it wasn't identified as zip64 from option, but it can pe as stream
+                let data_descriptor = build_data_descriptor(&archive_file_entry);
+                self.sink.write_all(data_descriptor.buffer())?;
+
+                let ts = ZIP64ExtendedInformationExtraField::new();
+                archive_file_entry.extra_fields.push(Box::new(ts));
+            }
         }
+
         self.data.add_archive_file_entry(archive_file_entry);
 
         self.data.archive_size = self.sink.get_written_bytes_count()?;
@@ -165,23 +186,25 @@ impl<'a, W: Write + 'a> ZipArchive<'a, W> {
     {
         let central_directory_offset = self.sink.get_written_bytes_count()?;
 
-        let mut central_directory_header =
-            ArchiveDescriptor::new(CENTRAL_DIRECTORY_ENTRY_BASE_SIZE + 200);
+        let mut central_directory_header = ArchiveDescriptor::new(500);
 
+        let mut has_a_zip64_file = false;
         for file_info in self.data.iter() {
-            build_central_directory_file_header(&mut central_directory_header, file_info);
+            has_a_zip64_file |=
+                build_central_directory_file_header(&mut central_directory_header, file_info);
 
             self.sink.write_all(central_directory_header.buffer())?;
             central_directory_header.clear();
         }
 
         let current_archive_size = self.sink.get_written_bytes_count()?;
-        let central_directory_size: u64 = current_archive_size - central_directory_offset;
+        let central_directory_size = current_archive_size - central_directory_offset;
 
         let end_of_central_directory = build_central_directory_end(
             &mut self.data,
             central_directory_offset,
             central_directory_size,
+            has_a_zip64_file,
         );
 
         self.sink.write_all(end_of_central_directory.buffer())?;

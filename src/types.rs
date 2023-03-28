@@ -24,7 +24,7 @@ pub struct ArchiveFileEntry {
     pub file_name_as_bytes: Vec<u8>,
     pub offset: u64,
     pub compressor: CompressionMethod,
-    pub file_disk_number: u16,
+    pub file_disk_number: u32,
     pub internal_file_attributes: u16,
     pub external_file_attributes: u32,
     pub file_comment: Option<Vec<u8>>,
@@ -75,6 +75,24 @@ impl ArchiveFileEntry {
 
     pub fn is_zip64(&self) -> bool {
         self.uncompressed_size >= u32::MAX as u64
+            || self.offset >= u32::MAX as u64
+            || self.compressed_size >= u32::MAX as u64
+    }
+
+    pub fn zip64_compressed_size(&self) -> u32 {
+        if self.compressed_size >= u32::MAX as u64 {
+            u32::MAX
+        } else {
+            self.compressed_size as u32
+        }
+    }
+
+    pub fn zip64_uncompressed_size(&self) -> u32 {
+        if self.uncompressed_size >= u32::MAX as u64 {
+            u32::MAX
+        } else {
+            self.uncompressed_size as u32
+        }
     }
 }
 
