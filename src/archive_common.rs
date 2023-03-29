@@ -9,6 +9,7 @@ use crate::compress::FileOptions;
 use crate::constants::CENTRAL_DIRECTORY_END_SIGNATURE;
 use crate::constants::CENTRAL_DIRECTORY_ENTRY_SIGNATURE;
 use crate::constants::DATA_DESCRIPTOR_SIGNATURE;
+use crate::constants::EXTENDED_LOCAL_HEADER_FLAG;
 use crate::constants::FILE_HEADER_BASE_SIZE;
 use crate::constants::LOCAL_FILE_HEADER_SIGNATURE;
 use crate::constants::VERSION_MADE_BY;
@@ -69,10 +70,12 @@ pub fn build_file_header(
         extra_fields.push(Box::new(ts));
     }
 
+    let mut zip64_extra_field_added = false;
     if options.large_file {
         //Be sure to make it last
         let ts = ZIP64ExtendedInformationExtraField::new();
         extra_fields.push(Box::new(ts));
+        zip64_extra_field_added = true;
     }
 
     let mut archive_file_entry = ArchiveFileEntry {
@@ -124,6 +127,11 @@ pub fn build_file_header(
     file_header.write_u16(archive_file_entry.extra_field_length); //extra field length
     file_header.write_bytes(&file_name_as_bytes_own);
     file_header.write_bytes(extended_data_buffer.bytes());
+
+    if !zip64_extra_field_added && archive_file_entry.is_zip64() {
+        let ts = ZIP64ExtendedInformationExtraField::new();
+        archive_file_entry.extra_fields.push(Box::new(ts));
+    }
 
     (file_header, archive_file_entry, zip_extra_offset)
 }
@@ -371,6 +379,10 @@ impl ArchiveDescriptor {
     pub fn bytes(&self) -> &[u8] {
         &self.buffer
     }
+}
+
+pub fn is_streaming(flags: u16) -> bool {
+    flags & EXTENDED_LOCAL_HEADER_FLAG != 0
 }
 
 pub struct ArchiveDescriptorReader {
@@ -735,12 +747,12 @@ impl ExtraFields for ExtendedTimestamp {
 ///
 /// Note: all fields stored in Intel low-byte/high-byte order.
 #[derive(Debug)]
-pub struct ZIP64ExtendedInformationExtraField {}
+struct ZIP64ExtendedInformationExtraField {}
 
 impl ZIP64ExtendedInformationExtraField {
     const ZIP64_TAG: u16 = 0x0001;
     const ZIP64_EXTRA_FIELD_SIZE: u16 = 8 * 3 + 4;
-    pub fn new() -> Self {
+    fn new() -> Self {
         Self {}
     }
 }

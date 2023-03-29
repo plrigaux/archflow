@@ -1,11 +1,3 @@
-//!
-//!
-//!
-//!
-//!
-//!
-//!
-//!
 //! This table shows the interpretation of the archive structure.
 //!
 //! <table>
@@ -44,7 +36,6 @@
 //! <p>ZIP64 Extra Field: Yes (if Uncompress or Compress size >= u32::MAX)</p>
 //! <p>Data Descriptor : N/A </p>
 //! </td>
-
 //! </tr>
 //! </table>
 //!
@@ -130,9 +121,9 @@ impl<'a> FileOptions<'a> {
         self
     }
 
-    /// Set whether the new file's compressed and uncompressed size is less than 4 GiB.
+    /// Set whether the new file's compressed and uncompressed size is more than 4 GiB (0xFFFFFFFF bytes).
     ///
-    /// If set to `false` and the file exceeds the limit, an I/O error is thrown. If set to `true`,
+    /// If set to `false` and the file exceeds the limit, the exra field will be replace by a data descriptor. If set to `true`,
     /// readers will require ZIP64 support and if the file does not exceed the limit, 20 B are
     /// wasted. The default is `false`.
     #[must_use]
@@ -155,16 +146,4 @@ impl<'a> Default for FileOptions<'a> {
             large_file: false,
         }
     }
-}
-
-pub enum ZipArchiveType {
-    /// All file descriptor will be in Zip64 format.
-    /// The archive will have a Zip64 ending
-    Force64,
-
-    ///All file descriptor will be in Zip32 (original )format. It will raise an error if the archive or its components are too large
-    Force32,
-
-    ///The archive will detetect automaticatlly if zip64 format applies
-    Auto,
 }
