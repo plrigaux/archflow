@@ -1,10 +1,10 @@
 use super::compressor::compress;
 use super::write_wrapper::{CommonWrapper, WriteSeekWrapper, WriteWrapper};
 
-use crate::archive_common::{
+use crate::archive_common::{ArchiveDescriptor, ExtraFieldZIP64ExtendedInformation};
+use crate::compress::common::{
     build_central_directory_end, build_central_directory_file_header, build_data_descriptor,
-    build_file_header, build_file_sizes_update, is_streaming, ArchiveDescriptor,
-    ExtraFieldZIP64ExtendedInformation, SubZipArchiveData, ZipArchiveCommon,
+    build_file_header, build_file_sizes_update, is_streaming, SubZipArchiveData, ZipArchiveCommon,
 };
 use crate::compress::FileOptions;
 use crate::compression::Level;
@@ -129,7 +129,7 @@ impl<'a, W: Write + 'a> ZipArchive<'a, W> {
         archive_file_entry.compressed_size = compressed_size;
         archive_file_entry.uncompressed_size = uncompressed_size;
         archive_file_entry.apparently_text_file(is_text);
-        
+
         if is_streaming(archive_file_entry.general_purpose_flags) {
             let data_descriptor = build_data_descriptor(&archive_file_entry);
             self.sink.write_all(data_descriptor.buffer())?;

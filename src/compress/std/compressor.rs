@@ -3,34 +3,14 @@ use std::io::{Read, Write};
 use bzip2::write::BzEncoder;
 use crc32fast::Hasher;
 use flate2::{write::DeflateEncoder, Compression};
-
 use xz2::write::XzEncoder;
 
 use crate::{
-    compress::common::{compress_common, compress_common_std, is_text_buf},
+    compress::common::{compress_common, compress_common_std, is_text_buf, write_std},
     compression::{CompressionMethod, Level},
     error::ArchiveError,
 };
 
-/* macro_rules! compress_common {
-    ( $encoder:expr, $hasher:expr, $reader:expr) => {{
-        let mut buf = vec![0; 4096];
-        let mut total_read: u64 = 0;
-
-        let mut read = $reader.read(&mut buf)?;
-        let is_text = is_text_buf(&buf[..read]);
-        while read != 0 {
-            total_read += read as u64;
-            $hasher.update(&buf[..read]);
-            $encoder.write_all(&buf[..read])?;
-            read = $reader.read(&mut buf)?;
-        }
-        $encoder.finish()?;
-
-        (total_read, is_text)
-    }};
-}
- */
 impl From<Level> for flate2::Compression {
     fn from(level: Level) -> Self {
         match level {
@@ -80,22 +60,8 @@ where
 {
     match compressor {
         CompressionMethod::Store() => {
-            let mut buf = vec![0; 4096];
-            let mut total_read: u64 = 0;
-
-            let mut read = reader.read(&mut buf)?;
-            let is_text = is_text_buf(&buf[..read]);
-
-            while read != 0 {
-                total_read += read as u64;
-                hasher.update(&buf[..read]);
-                writer.write_all(&buf[..read])?;
-
-                read = reader.read(&mut buf)?;
-            }
-            writer.flush()?;
-
-            Ok((total_read, is_text))
+            let total_read = write_std!(writer, hasher, reader);
+            Ok(total_read)
         }
 
         CompressionMethod::Deflate() => {

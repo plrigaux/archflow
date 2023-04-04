@@ -3,32 +3,11 @@ use crc32fast::Hasher;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 use crate::{
-    compress::common::{compress_common, compress_common_async, is_text_buf},
+    compress::common::{compress_common, compress_common_async, is_text_buf, write_async},
     compression::{CompressionMethod, Level},
     error::ArchiveError,
 };
 
-/* macro_rules! compress_common {
-    ( $encoder:expr, $hasher:expr, $reader:expr) => {{
-        let mut buf = vec![0; 4096];
-        let mut total_read: u64 = 0;
-
-        let mut read = $reader.read(&mut buf).await?;
-        let is_text = is_text_buf(&buf[..read]);
-
-        while read != 0 {
-            total_read += read as u64;
-            $hasher.update(&buf[..read]);
-            $encoder.write_all(&buf[..read]).await?;
-            read = $reader.read(&mut buf).await?;
-        }
-        $encoder.flush().await?;
-
-        $encoder.shutdown().await?;
-        (total_read, is_text)
-    }};
-}
- */
 impl From<Level> for async_compression::Level {
     fn from(level: Level) -> Self {
         match level {
@@ -60,22 +39,8 @@ where
 
     match method {
         CompressionMethod::Store() => {
-            let mut buf = vec![0; 4096];
-            let mut total_read: u64 = 0;
-
-            let mut read = reader.read(&mut buf).await?;
-            let is_text = is_text_buf(&buf[..read]);
-
-            while read != 0 {
-                total_read += read as u64;
-                hasher.update(&buf[..read]);
-                writer.write_all(&buf[..read]).await?;
-
-                read = reader.read(&mut buf).await?;
-            }
-            writer.flush().await?;
-
-            Ok((total_read, is_text))
+            let total_read = write_async!(writer, hasher, reader);
+            Ok(total_read)
         }
         CompressionMethod::Deflate() => {
             let mut zencoder = DeflateEncoder::with_quality(writer, compression_level.into());
@@ -125,6 +90,7 @@ mod test {
     use flate2::write::DeflateEncoder as DeflateEncoderFlate2;
     use flate2::write::ZlibEncoder as ZlibEncoderFlate;
     use std::io::Write;
+
     #[tokio::test]
     async fn test_defate_basic() {
         let x = b"example";

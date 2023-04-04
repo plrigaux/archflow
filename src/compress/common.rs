@@ -1,3 +1,16 @@
+use crate::{
+    archive_common::{
+        ArchiveDescriptor, CentralDirectoryEnd, ExtraFieldExtendedTimestamp,
+        ExtraFieldZIP64ExtendedInformation, ExtraFields,
+    },
+    compression::CompressionMethod,
+    constants::{
+        CENTRAL_DIRECTORY_ENTRY_SIGNATURE, DATA_DESCRIPTOR_SIGNATURE, EXTENDED_LOCAL_HEADER_FLAG,
+        FILE_HEADER_BASE_SIZE, LOCAL_FILE_HEADER_SIGNATURE, VERSION_MADE_BY, ZIP64_DESCRIPTOR_SIZE,
+    },
+    types::ArchiveFileEntry,
+};
+
 /// Fast routine for detection of plain text
 ///  (ASCII or an ASCII-compatible extension such as ISO-8859, UTF-8, etc.)
 /// Author: Cosmin Truta.
@@ -50,53 +63,276 @@ macro_rules! compress_common_std {
     }};
 }
 
-/* macro_rules! compress_common_async {
-    ( $encoder:expr, $hasher:expr, $reader:expr) => {{
-        compress_common!($encoder, $hasher, $reader)
+macro_rules! write_async {
+    ( $encoder:expr, $hasher:expr, $reader:ident) => {{
+        let (total_read, is_text) = compress_common!($encoder, $hasher, $reader.await);
         $encoder.flush().await?;
-
-        $encoder.shutdown().await?;
         (total_read, is_text)
     }};
-} */
-
-/* macro_rules! decode {
-    ($reader:ident $($_await:tt)*) => {
-        {
-            let mut i = 0u64;
-            let mut buf = [0u8; 1];
-
-            let mut j = 0;
-            loop {
-                if j > 9 {
-                    // if j * 7 > 64
-                    panic!() // todo move to an error
-                }
-                $reader.read_exact(&mut buf[..])$($_await)*?;
-                i |= (u64::from(buf[0] & 0x7F)) << (j * 7);
-                if (buf[0] >> 7) == 0 {
-                    break;
-                } else {
-                    j += 1;
-                }
-            }
-
-            Ok(i)
-        }
-    }
 }
 
-async fn decode_variable_async<R: AsyncRead + Unpin + Send>(reader: &mut R) -> Result<u64> {
-    decode!(reader.await)
+macro_rules! write_std {
+    ( $encoder:expr, $hasher:expr, $reader:ident) => {{
+        let (total_read, is_text) = compress_common!($encoder, $hasher, $reader);
+        $encoder.flush()?;
+        (total_read, is_text)
+    }};
 }
 
-async fn decode_variable<R: Read>(reader: &mut R) -> Result<u64> {
-    decode!(reader)
-}
-*/
 pub(crate) use compress_common;
 pub(crate) use compress_common_async;
 pub(crate) use compress_common_std;
+pub(crate) use write_async;
+pub(crate) use write_std;
+
+use super::FileOptions;
+
+#[derive(Debug, Default)]
+pub struct SubZipArchiveData {
+    files_info: Vec<ArchiveFileEntry>,
+    central_directory_end: CentralDirectoryEnd,
+    pub archive_size: u64,
+    pub base_flags: u16,
+    is_big_archive: bool,
+}
+
+impl SubZipArchiveData {
+    pub fn set_archive_comment(&mut self, comment: &str) {
+        self.central_directory_end.set_archive_comment(comment)
+    }
+
+    pub fn add_archive_file_entry(&mut self, archive_file_entry: ArchiveFileEntry) {
+        self.is_big_archive |= archive_file_entry.is_zip64();
+        self.files_info.push(archive_file_entry)
+    }
+
+    pub fn iter(&mut self) -> std::slice::IterMut<'_, ArchiveFileEntry> {
+        self.files_info.iter_mut()
+    }
+}
+
+pub trait ZipArchiveCommon {
+    fn get_archive_size(&self) -> u64;
+    fn get_data(&self) -> &SubZipArchiveData;
+    fn get_mut_data(&mut self) -> &mut SubZipArchiveData;
+
+    fn set_archive_comment(&mut self, comment: &str) {
+        self.get_mut_data().set_archive_comment(comment);
+    }
+}
+
+pub fn build_file_header(
+    file_name: &str,
+    options: &FileOptions,
+    compressor: CompressionMethod,
+    offset: u64,
+    data: &SubZipArchiveData,
+) -> (ArchiveDescriptor, ArchiveFileEntry, u64) {
+    let file_nameas_bytes = file_name.as_bytes();
+    let file_name_as_bytes_own = file_nameas_bytes.to_owned();
+    let file_name_len = file_name_as_bytes_own.len() as u16;
+
+    let (date, time) = options.last_modified_time.ms_dos();
+    let mut general_purpose_flags: u16 = data.base_flags;
+    if file_name_as_bytes_own.len() > file_name.len() {
+        general_purpose_flags |= 1 << 11; //set utf8 flag
+    }
+
+    let file_comment = if let Some(comment) = options.comment {
+        let file_comment_as_bytes_own = comment.as_bytes().to_owned();
+        if file_comment_as_bytes_own.len() > comment.len() {
+            general_purpose_flags |= 1 << 11; //set utf8 flag
+        }
+        Some(file_comment_as_bytes_own)
+    } else {
+        None
+    };
+
+    general_purpose_flags = compressor
+        .update_general_purpose_bit_flag(general_purpose_flags, options.compression_level);
+
+    let minimum_version_needed_to_extract = compressor.zip_version_needed();
+    let version_made_by = options.system.update_version_needed(VERSION_MADE_BY);
+
+    let mut extra_fields: Vec<Box<dyn ExtraFields>> = Vec::new();
+
+    if options.last_modified_time.extended_timestamp() {
+        let ts = ExtraFieldExtendedTimestamp::new(
+            Some(options.last_modified_time.timestamp()),
+            None,
+            None,
+        );
+        extra_fields.push(Box::new(ts));
+    }
+
+    let mut zip64_extra_field_added = false;
+    if options.large_file && !is_streaming(data.base_flags) {
+        //Be sure to make it last
+        let ts = ExtraFieldZIP64ExtendedInformation::new();
+        extra_fields.push(Box::new(ts));
+        zip64_extra_field_added = true;
+    }
+
+    let mut archive_file_entry = ArchiveFileEntry {
+        version_made_by,
+        minimum_version_needed_to_extract,
+        general_purpose_flags,
+        compression_method: compressor.zip_code(),
+        last_mod_file_time: time,
+        last_mod_file_date: date,
+        crc32: 0,
+        compressed_size: 0,
+        uncompressed_size: 0,
+        file_name_len,
+        extra_field_length: 0,
+        file_name_as_bytes: file_name.as_bytes().to_owned(),
+        offset,
+        compressor,
+        internal_file_attributes: 0,
+        external_file_attributes: 0,
+        file_disk_number: 0,
+        extra_fields,
+        file_comment,
+        has_zip64_extra_field: zip64_extra_field_added,
+    };
+
+    let mut extended_data_buffer = ArchiveDescriptor::new(500);
+
+    let mut zip_extra_offset: u64 = 0;
+    let mut it = archive_file_entry.extra_fields.iter().peekable();
+    while let Some(extra_field) = it.next() {
+        if it.peek().is_none() {
+            zip_extra_offset = extended_data_buffer.len() as u64;
+        }
+        extra_field.file_header_write_data(&mut extended_data_buffer, &archive_file_entry);
+    }
+
+    archive_file_entry.extra_field_length = extended_data_buffer.len() as u16;
+
+    let mut file_header = ArchiveDescriptor::new(FILE_HEADER_BASE_SIZE + file_name_len as u64);
+    file_header.write_u32(LOCAL_FILE_HEADER_SIGNATURE);
+    file_header.write_u16(minimum_version_needed_to_extract);
+    file_header.write_u16(general_purpose_flags);
+    file_header.write_u16(archive_file_entry.compression_method);
+    file_header.write_u16(time);
+    file_header.write_u16(date);
+    file_header.write_u32(0); // CRC-32
+    file_header.write_u32(0); // compressed size
+    file_header.write_u32(0); // uncompressed size
+    file_header.write_u16(file_name_len); // file name length
+    file_header.write_u16(archive_file_entry.extra_field_length); //extra field length
+    file_header.write_bytes(&file_name_as_bytes_own);
+    file_header.write_bytes(extended_data_buffer.bytes());
+
+    (file_header, archive_file_entry, zip_extra_offset)
+}
+
+pub fn build_central_directory_file_header(
+    central_directory_header: &mut ArchiveDescriptor,
+    file_info: &mut ArchiveFileEntry,
+) {
+    let mut extra_field_buffer = ArchiveDescriptor::new(file_info.extra_field_length as u64);
+
+    for extra_field in &file_info.extra_fields {
+        extra_field.central_header_extra_write_data(&mut extra_field_buffer, file_info)
+    }
+
+    file_info.extra_field_length = extra_field_buffer.len() as u16;
+
+    central_directory_header.write_u32(CENTRAL_DIRECTORY_ENTRY_SIGNATURE); // Central directory entry signature.
+    central_directory_header.write_u16(file_info.version_made_by); // Version made by.
+    central_directory_header.write_u16(file_info.version_needed_to_extract()); // Version needed to extract.
+    central_directory_header.write_u16(file_info.general_purpose_flags); // General purpose flag (temporary crc and sizes + UTF-8 filename).
+    central_directory_header.write_u16(file_info.compression_method); // Compression method .
+    central_directory_header.write_u16(file_info.last_mod_file_time); // Modification time.
+    central_directory_header.write_u16(file_info.last_mod_file_date); // Modification date.
+    central_directory_header.write_u32(file_info.crc32); // CRC32.
+    central_directory_header.write_u32(file_info.zip64_compressed_size()); // Compressed size.
+    central_directory_header.write_u32(file_info.zip64_uncompressed_size()); // Uncompressed size.
+    central_directory_header.write_u16(file_info.file_name_len); // Filename length.
+    central_directory_header.write_u16(file_info.extra_field_length); // Extra field length.
+    central_directory_header.write_u16(file_info.file_comment_length()); // File comment length.
+    central_directory_header.write_u16(file_info.file_disk_number as u16); // File's Disk number.
+    central_directory_header.write_u16(file_info.internal_file_attributes); // Internal file attributes.
+    central_directory_header.write_u32((0o100644 << 16) as u32); // External file attributes (regular file / rw-r--r--).
+    central_directory_header.write_u32(file_info.zip64_offset()); // Offset from start of file to local file header.
+    central_directory_header.write_bytes(&file_info.file_name_as_bytes); // Filename.
+
+    central_directory_header.write_bytes(extra_field_buffer.bytes()); // file comment.
+
+    if let Some(comment) = &file_info.file_comment {
+        central_directory_header.write_bytes(comment); // file comment.
+    }
+}
+
+pub fn build_data_descriptor(archive_file_entry: &ArchiveFileEntry) -> ArchiveDescriptor {
+    let mut file_descriptor = ArchiveDescriptor::new(ZIP64_DESCRIPTOR_SIZE);
+    file_descriptor.write_u32(DATA_DESCRIPTOR_SIGNATURE); //This is optional
+    file_descriptor.write_u32(archive_file_entry.crc32);
+
+    if archive_file_entry.is_zip64() {
+        file_descriptor.write_u64(archive_file_entry.compressed_size);
+        file_descriptor.write_u64(archive_file_entry.uncompressed_size);
+    } else {
+        file_descriptor.write_u32(archive_file_entry.compressed_size as u32);
+        file_descriptor.write_u32(archive_file_entry.uncompressed_size as u32);
+    }
+
+    file_descriptor
+}
+
+pub fn build_file_sizes_update(archive_file_entry: &ArchiveFileEntry) -> ArchiveDescriptor {
+    let mut file_descriptor = ArchiveDescriptor::new(3 * 4);
+
+    file_descriptor.write_u32(archive_file_entry.crc32);
+    file_descriptor.write_u32(archive_file_entry.zip64_compressed_size());
+    file_descriptor.write_u32(archive_file_entry.zip64_uncompressed_size());
+
+    file_descriptor
+}
+
+pub fn build_central_directory_end(
+    data: &mut SubZipArchiveData,
+    central_directory_offset: u64,
+    central_directory_size: u64,
+) -> ArchiveDescriptor {
+    data.central_directory_end.number_of_this_disk = 0;
+    data.central_directory_end
+        .number_of_the_disk_with_central_directory = 0;
+    data.central_directory_end
+        .total_number_of_entries_on_this_disk = data.files_info.len() as u64;
+    data.central_directory_end
+        .total_number_of_entries_in_the_central_directory = data.files_info.len() as u64;
+    data.central_directory_end.central_directory_size = central_directory_size;
+    data.central_directory_end
+        .offset_of_start_of_central_directory = central_directory_offset;
+
+    let mut end_of_central_directory = ArchiveDescriptor::new(500); //TODO calculate capacity size
+
+    if data.central_directory_end.needs_zip64_format_extensions() {
+        //[zip64 end of central directory record]
+
+        data.central_directory_end
+            .create_zip64_end_of_central_directory_record(&mut end_of_central_directory);
+        //------------------------------------------------
+        //[zip64 end of central directory locator]
+        //------------------------------------------------
+        data.central_directory_end
+            .create_end_of_central_directory_locator(&mut end_of_central_directory);
+    }
+
+    //4.4.1.5  The end of central directory record and the Zip64 end
+    //of central directory locator record MUST reside on the same
+    //disk when splitting or spanning an archive.
+    data.central_directory_end
+        .create_end_of_central_directory(&mut end_of_central_directory);
+
+    end_of_central_directory
+}
+
+pub fn is_streaming(flags: u16) -> bool {
+    flags & EXTENDED_LOCAL_HEADER_FLAG != 0
+}
 
 #[cfg(test)]
 mod test {

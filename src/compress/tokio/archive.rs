@@ -1,10 +1,10 @@
 use super::async_wrapper::{AsyncWriteSeekWrapper, AsyncWriteWrapper, CommonWrapper};
 use super::compressor::compress;
 
-use crate::archive_common::{
+use crate::archive_common::{ArchiveDescriptor, ExtraFieldZIP64ExtendedInformation};
+use crate::compress::common::{
     build_central_directory_end, build_central_directory_file_header, build_data_descriptor,
-    build_file_header, build_file_sizes_update, is_streaming, ArchiveDescriptor,
-    ExtraFieldZIP64ExtendedInformation, SubZipArchiveData,
+    build_file_header, build_file_sizes_update, is_streaming, SubZipArchiveData,
 };
 use crate::compress::FileOptions;
 use crate::compression::Level;
@@ -191,9 +191,6 @@ impl<'a, W: AsyncWrite + Unpin + Send + 'a> ZipArchive<'a, W> {
         let mut central_directory_header = ArchiveDescriptor::new(500);
 
         for file_info in self.data.iter() {
-            let off = self.sink.get_written_bytes_count()?;
-            println!("FILE OFFSET  {:?}  {:0X}", off, off);
-
             build_central_directory_file_header(&mut central_directory_header, file_info);
 
             self.sink
@@ -204,9 +201,6 @@ impl<'a, W: AsyncWrite + Unpin + Send + 'a> ZipArchive<'a, W> {
 
         let current_archive_size = self.sink.get_written_bytes_count()?;
         let central_directory_size = current_archive_size - central_directory_offset;
-        println!(
-            "SIZE {central_directory_size} = {current_archive_size} - {central_directory_offset}"
-        );
 
         let end_of_central_directory = build_central_directory_end(
             &mut self.data,
