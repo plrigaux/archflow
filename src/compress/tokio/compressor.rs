@@ -31,13 +31,13 @@ where
     R: AsyncRead + Unpin,
     W: AsyncWrite + Unpin,
 {
-    let method = if compression_level == Level::None {
+    let compression_method = if compression_level == Level::None {
         CompressionMethod::Store()
     } else {
         compressor
     };
 
-    match method {
+    match compression_method {
         CompressionMethod::Store() => {
             let total_read = write_async!(writer, hasher, reader);
             Ok(total_read)

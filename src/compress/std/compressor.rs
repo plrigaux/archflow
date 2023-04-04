@@ -58,7 +58,13 @@ where
     R: Read,
     W: Write + ?Sized,
 {
-    match compressor {
+    let compression_method = if Level::None == compression_level {
+        CompressionMethod::Store()
+    } else {
+        compressor
+    };
+
+    match compression_method {
         CompressionMethod::Store() => {
             let total_read = write_std!(writer, hasher, reader);
             Ok(total_read)
@@ -82,12 +88,12 @@ where
 
         CompressionMethod::Zstd() => {
             let zstd_compression_level = match compression_level {
-                Level::Fastest => Ok(1),
-                Level::Best => Ok(22),
-                Level::Default => Ok(zstd::DEFAULT_COMPRESSION_LEVEL),
-                Level::None => Err(ArchiveError::UnsuportedCompressionLevel(compressor)),
-                Level::Precise(val) => Ok(val),
-            }?;
+                Level::Fastest => 1,
+                Level::Best => 22,
+                Level::Default => zstd::DEFAULT_COMPRESSION_LEVEL,
+                Level::None => 0,
+                Level::Precise(val) => val,
+            };
 
             let mut encoder = zstd::stream::write::Encoder::new(writer, zstd_compression_level)?;
             let total_read = compress_common_std!(encoder, hasher, reader);
