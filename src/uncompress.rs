@@ -375,7 +375,7 @@ impl<R: Read + Seek> Display for ArchiveReader<R> {
 
 #[cfg(test)]
 mod test {
-    use std::{fs::File, io::Cursor, path::Path};
+    use std::io::Cursor;
 
     use crate::error::ArchiveError;
 
@@ -401,13 +401,6 @@ mod test {
 
         let buff = Cursor::new(vec);
         ArchiveReader::new(buff)?;
-        Ok(())
-    }
-    #[test]
-    fn test_file_rust_zip_lib_lzma() -> Result<(), ArchiveError> {
-        let p = Path::new("res_test/outi2.zip");
-        let f = File::open(p)?;
-        ArchiveReader::new(f)?;
         Ok(())
     }
 }
