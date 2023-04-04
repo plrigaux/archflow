@@ -59,10 +59,10 @@ impl<R: Read + Seek> ArchiveReader<R> {
                     "CENTRAL_DIRECTORY_END_SIGNATURE Not found".to_owned(),
                 ));
             }
-            println!(
+            /*             println!(
                 "position {} >= search_upper_bound {}",
                 position, search_upper_bound
-            );
+            ); */
             reader.seek(SeekFrom::Start(position))?;
 
             let val = reader.read_u32::<LittleEndian>()?;

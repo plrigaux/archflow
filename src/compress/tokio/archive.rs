@@ -204,6 +204,9 @@ impl<'a, W: AsyncWrite + Unpin + Send + 'a> ZipArchive<'a, W> {
 
         let current_archive_size = self.sink.get_written_bytes_count()?;
         let central_directory_size = current_archive_size - central_directory_offset;
+        println!(
+            "SIZE {central_directory_size} = {current_archive_size} - {central_directory_offset}"
+        );
 
         let end_of_central_directory = build_central_directory_end(
             &mut self.data,

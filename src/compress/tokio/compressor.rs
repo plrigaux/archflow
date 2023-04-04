@@ -3,12 +3,12 @@ use crc32fast::Hasher;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 use crate::{
-    compress::common::is_text_buf,
+    compress::common::{compress_common, compress_common_async, is_text_buf},
     compression::{CompressionMethod, Level},
     error::ArchiveError,
 };
 
-macro_rules! compress_common {
+/* macro_rules! compress_common {
     ( $encoder:expr, $hasher:expr, $reader:expr) => {{
         let mut buf = vec![0; 4096];
         let mut total_read: u64 = 0;
@@ -20,8 +20,6 @@ macro_rules! compress_common {
             total_read += read as u64;
             $hasher.update(&buf[..read]);
             $encoder.write_all(&buf[..read]).await?;
-            //self.sink.write_all(&buf[..read]).await?; // Payload chunk.
-
             read = $reader.read(&mut buf).await?;
         }
         $encoder.flush().await?;
@@ -30,7 +28,7 @@ macro_rules! compress_common {
         (total_read, is_text)
     }};
 }
-
+ */
 impl From<Level> for async_compression::Level {
     fn from(level: Level) -> Self {
         match level {
@@ -82,7 +80,7 @@ where
         CompressionMethod::Deflate() => {
             let mut zencoder = DeflateEncoder::with_quality(writer, compression_level.into());
 
-            let total_read = compress_common!(zencoder, hasher, reader);
+            let total_read = compress_common_async!(zencoder, hasher, reader);
 
             Ok(total_read)
         }
@@ -90,7 +88,7 @@ where
         CompressionMethod::BZip2() => {
             let mut encoder = BzEncoder::with_quality(writer, compression_level.into());
 
-            let total_read = compress_common!(encoder, hasher, reader);
+            let total_read = compress_common_async!(encoder, hasher, reader);
 
             Ok(total_read)
         }
@@ -98,7 +96,7 @@ where
         CompressionMethod::Zstd() => {
             let mut encoder = ZstdEncoder::with_quality(writer, compression_level.into());
 
-            let total_read = compress_common!(encoder, hasher, reader);
+            let total_read = compress_common_async!(encoder, hasher, reader);
 
             Ok(total_read)
         }
@@ -106,7 +104,7 @@ where
             //let bw = BufWriter::new(writer);
             let mut encoder = XzEncoder::with_quality(writer, compression_level.into());
 
-            let total_read = compress_common!(encoder, hasher, reader);
+            let total_read = compress_common_async!(encoder, hasher, reader);
 
             Ok(total_read)
         }

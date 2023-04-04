@@ -4,7 +4,6 @@
 ///
 /// See "proginfo/txtvsbin.txt" for more information.
 pub fn is_text_buf(buffer: &[u8]) -> bool {
-    println!("BUF LEN {}", buffer.len());
     let mut result = false;
     for c in buffer {
         if *c >= 32 {
@@ -15,6 +14,51 @@ pub fn is_text_buf(buffer: &[u8]) -> bool {
     }
     result
 }
+
+macro_rules! compress_common {
+    ( $encoder:expr, $hasher:expr, $reader:ident $($_await:tt)*) => {{
+        let mut buf = vec![0; 4096];
+        let mut total_read: u64 = 0;
+
+        let mut read = $reader.read(&mut buf)$($_await)*?;
+        let is_text = is_text_buf(&buf[..read]);
+
+        while read != 0 {
+            total_read += read as u64;
+            $hasher.update(&buf[..read]);
+            $encoder.write_all(&buf[..read])$($_await)*?;
+            read = $reader.read(&mut buf)$($_await)*?;
+        }
+        (total_read, is_text)
+    }};
+}
+
+macro_rules! compress_common_async {
+    ( $encoder:expr, $hasher:expr, $reader:ident) => {{
+        let (total_read, is_text) = compress_common!($encoder, $hasher, $reader.await);
+        $encoder.flush().await?;
+        $encoder.shutdown().await?;
+        (total_read, is_text)
+    }};
+}
+
+macro_rules! compress_common_std {
+    ( $encoder:expr, $hasher:expr, $reader:ident) => {{
+        let (total_read, is_text) = compress_common!($encoder, $hasher, $reader);
+        $encoder.finish()?;
+        (total_read, is_text)
+    }};
+}
+
+/* macro_rules! compress_common_async {
+    ( $encoder:expr, $hasher:expr, $reader:expr) => {{
+        compress_common!($encoder, $hasher, $reader)
+        $encoder.flush().await?;
+
+        $encoder.shutdown().await?;
+        (total_read, is_text)
+    }};
+} */
 
 /* macro_rules! decode {
     ($reader:ident $($_await:tt)*) => {
@@ -50,6 +94,10 @@ async fn decode_variable<R: Read>(reader: &mut R) -> Result<u64> {
     decode!(reader)
 }
 */
+pub(crate) use compress_common;
+pub(crate) use compress_common_async;
+pub(crate) use compress_common_std;
+
 #[cfg(test)]
 mod test {
     use super::is_text_buf;

@@ -591,7 +591,7 @@ impl CentralDirectoryEnd {
             end_of_central_directory.write_u16(0);
         };
 
-        println!("EOCD\n {:?}", self)
+        println!("EOCD\n {:#?}", self)
     }
 }
 

@@ -7,12 +7,12 @@ use flate2::{write::DeflateEncoder, Compression};
 use xz2::write::XzEncoder;
 
 use crate::{
-    compress::common::is_text_buf,
+    compress::common::{compress_common, compress_common_std, is_text_buf},
     compression::{CompressionMethod, Level},
     error::ArchiveError,
 };
 
-macro_rules! compress_common {
+/* macro_rules! compress_common {
     ( $encoder:expr, $hasher:expr, $reader:expr) => {{
         let mut buf = vec![0; 4096];
         let mut total_read: u64 = 0;
@@ -30,7 +30,7 @@ macro_rules! compress_common {
         (total_read, is_text)
     }};
 }
-
+ */
 impl From<Level> for flate2::Compression {
     fn from(level: Level) -> Self {
         match level {
@@ -101,7 +101,7 @@ where
         CompressionMethod::Deflate() => {
             let mut encoder = DeflateEncoder::new(writer, compression_level.into());
 
-            let total_read = compress_common!(encoder, hasher, reader);
+            let total_read = compress_common_std!(encoder, hasher, reader);
 
             Ok(total_read)
         }
@@ -109,7 +109,7 @@ where
         CompressionMethod::BZip2() => {
             let mut encoder = BzEncoder::new(writer, compression_level.into());
 
-            let total_read = compress_common!(encoder, hasher, reader);
+            let total_read = compress_common_std!(encoder, hasher, reader);
 
             Ok(total_read)
         }
@@ -124,14 +124,14 @@ where
             }?;
 
             let mut encoder = zstd::stream::write::Encoder::new(writer, zstd_compression_level)?;
-            let total_read = compress_common!(encoder, hasher, reader);
+            let total_read = compress_common_std!(encoder, hasher, reader);
 
             Ok(total_read)
         }
         CompressionMethod::Xz() => {
             let mut encoder = XzEncoder::new(writer, compression_level.into());
 
-            let total_read = compress_common!(encoder, hasher, reader);
+            let total_read = compress_common_std!(encoder, hasher, reader);
 
             Ok(total_read)
         }
