@@ -36,6 +36,7 @@ impl CompressionMethod {
         // higher versions matched first
         match self {
             CompressionMethod::Zstd() => 63,
+            CompressionMethod::Xz() => 63,
             CompressionMethod::BZip2() => 46,
             _ => 20,
         }

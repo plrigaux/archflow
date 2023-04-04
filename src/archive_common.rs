@@ -60,27 +60,31 @@ pub fn build_file_header(
     general_purpose_flags = compressor
         .update_general_purpose_bit_flag(general_purpose_flags, options.compression_level);
 
-    let version_needed = compressor.zip_version_needed();
+    let minimum_version_needed_to_extract = compressor.zip_version_needed();
     let version_made_by = options.system.update_version_needed(VERSION_MADE_BY);
 
     let mut extra_fields: Vec<Box<dyn ExtraFields>> = Vec::new();
 
     if options.last_modified_time.extended_timestamp() {
-        let ts = ExtendedTimestamp::new(Some(options.last_modified_time.timestamp()), None, None);
+        let ts = ExtraFieldExtendedTimestamp::new(
+            Some(options.last_modified_time.timestamp()),
+            None,
+            None,
+        );
         extra_fields.push(Box::new(ts));
     }
 
     let mut zip64_extra_field_added = false;
-    if options.large_file {
+    if options.large_file && !is_streaming(data.base_flags) {
         //Be sure to make it last
-        let ts = ZIP64ExtendedInformationExtraField::new();
+        let ts = ExtraFieldZIP64ExtendedInformation::new();
         extra_fields.push(Box::new(ts));
         zip64_extra_field_added = true;
     }
 
     let mut archive_file_entry = ArchiveFileEntry {
         version_made_by,
-        version_needed,
+        minimum_version_needed_to_extract,
         general_purpose_flags,
         compression_method: compressor.zip_code(),
         last_mod_file_time: time,
@@ -98,6 +102,7 @@ pub fn build_file_header(
         file_disk_number: 0,
         extra_fields,
         file_comment,
+        has_zip64_extra_field: zip64_extra_field_added,
     };
 
     let mut extended_data_buffer = ArchiveDescriptor::new(500);
@@ -115,7 +120,7 @@ pub fn build_file_header(
 
     let mut file_header = ArchiveDescriptor::new(FILE_HEADER_BASE_SIZE + file_name_len as u64);
     file_header.write_u32(LOCAL_FILE_HEADER_SIGNATURE);
-    file_header.write_u16(version_needed);
+    file_header.write_u16(minimum_version_needed_to_extract);
     file_header.write_u16(general_purpose_flags);
     file_header.write_u16(archive_file_entry.compression_method);
     file_header.write_u16(time);
@@ -128,50 +133,45 @@ pub fn build_file_header(
     file_header.write_bytes(&file_name_as_bytes_own);
     file_header.write_bytes(extended_data_buffer.bytes());
 
-    if !zip64_extra_field_added && archive_file_entry.is_zip64() {
-        let ts = ZIP64ExtendedInformationExtraField::new();
-        archive_file_entry.extra_fields.push(Box::new(ts));
-    }
-
     (file_header, archive_file_entry, zip_extra_offset)
 }
 
 pub fn build_central_directory_file_header(
     central_directory_header: &mut ArchiveDescriptor,
-    file_info: &ArchiveFileEntry,
-) -> bool {
-    central_directory_header.write_u32(CENTRAL_DIRECTORY_ENTRY_SIGNATURE); // Central directory entry signature.
-    central_directory_header.write_u16(file_info.version_made_by); // Version made by.
-    central_directory_header.write_u16(file_info.version_needed()); // Version needed to extract.
-    central_directory_header.write_u16(file_info.general_purpose_flags); // General purpose flag (temporary crc and sizes + UTF-8 filename).
-    central_directory_header.write_u16(file_info.compression_method); // Compression method .
-    central_directory_header.write_u16(file_info.last_mod_file_time); // Modification time.
-    central_directory_header.write_u16(file_info.last_mod_file_date); // Modification date.
-    central_directory_header.write_u32(file_info.crc32); // CRC32.
-    central_directory_header.write_u32(file_info.compressed_size as u32); // Compressed size.
-    central_directory_header.write_u32(file_info.uncompressed_size as u32); // Uncompressed size.
-    central_directory_header.write_u16(file_info.file_name_len); // Filename length.
-    central_directory_header.write_u16(file_info.extra_field_length); // Extra field length.
-    central_directory_header.write_u16(file_info.file_comment_length()); // File comment length.
-    central_directory_header.write_u16(0u16); // File's Disk number.
-    central_directory_header.write_u16(0u16); // Internal file attributes.
-    central_directory_header.write_u32((0o100644 << 16) as u32); // External file attributes (regular file / rw-r--r--).
-    central_directory_header.write_u32(file_info.offset as u32); // Offset from start of file to local file header.
-    central_directory_header.write_bytes(&file_info.file_name_as_bytes); // Filename.
-
+    file_info: &mut ArchiveFileEntry,
+) {
     let mut extra_field_buffer = ArchiveDescriptor::new(file_info.extra_field_length as u64);
 
     for extra_field in &file_info.extra_fields {
         extra_field.central_header_extra_write_data(&mut extra_field_buffer, file_info)
     }
 
+    file_info.extra_field_length = extra_field_buffer.len() as u16;
+
+    central_directory_header.write_u32(CENTRAL_DIRECTORY_ENTRY_SIGNATURE); // Central directory entry signature.
+    central_directory_header.write_u16(file_info.version_made_by); // Version made by.
+    central_directory_header.write_u16(file_info.version_needed_to_extract()); // Version needed to extract.
+    central_directory_header.write_u16(file_info.general_purpose_flags); // General purpose flag (temporary crc and sizes + UTF-8 filename).
+    central_directory_header.write_u16(file_info.compression_method); // Compression method .
+    central_directory_header.write_u16(file_info.last_mod_file_time); // Modification time.
+    central_directory_header.write_u16(file_info.last_mod_file_date); // Modification date.
+    central_directory_header.write_u32(file_info.crc32); // CRC32.
+    central_directory_header.write_u32(file_info.zip64_compressed_size()); // Compressed size.
+    central_directory_header.write_u32(file_info.zip64_uncompressed_size()); // Uncompressed size.
+    central_directory_header.write_u16(file_info.file_name_len); // Filename length.
+    central_directory_header.write_u16(file_info.extra_field_length); // Extra field length.
+    central_directory_header.write_u16(file_info.file_comment_length()); // File comment length.
+    central_directory_header.write_u16(file_info.file_disk_number as u16); // File's Disk number.
+    central_directory_header.write_u16(file_info.internal_file_attributes); // Internal file attributes.
+    central_directory_header.write_u32((0o100644 << 16) as u32); // External file attributes (regular file / rw-r--r--).
+    central_directory_header.write_u32(file_info.zip64_offset()); // Offset from start of file to local file header.
+    central_directory_header.write_bytes(&file_info.file_name_as_bytes); // Filename.
+
     central_directory_header.write_bytes(extra_field_buffer.bytes()); // file comment.
 
     if let Some(comment) = &file_info.file_comment {
         central_directory_header.write_bytes(comment); // file comment.
     }
-
-    file_info.is_zip64()
 }
 
 pub fn build_data_descriptor(archive_file_entry: &ArchiveFileEntry) -> ArchiveDescriptor {
@@ -204,7 +204,6 @@ pub fn build_central_directory_end(
     data: &mut SubZipArchiveData,
     central_directory_offset: u64,
     central_directory_size: u64,
-    has_a_zip64_file: bool,
 ) -> ArchiveDescriptor {
     data.central_directory_end.number_of_this_disk = 0;
     data.central_directory_end
@@ -219,7 +218,7 @@ pub fn build_central_directory_end(
 
     let mut end_of_central_directory = ArchiveDescriptor::new(500); //TODO calculate capacity size
 
-    if data.central_directory_end.needs_zip64_format_extensions() || has_a_zip64_file {
+    if data.central_directory_end.needs_zip64_format_extensions() {
         //[zip64 end of central directory record]
 
         data.central_directory_end
@@ -234,7 +233,6 @@ pub fn build_central_directory_end(
     //4.4.1.5  The end of central directory record and the Zip64 end
     //of central directory locator record MUST reside on the same
     //disk when splitting or spanning an archive.
-
     data.central_directory_end
         .create_end_of_central_directory(&mut end_of_central_directory);
 
@@ -260,8 +258,8 @@ impl SubZipArchiveData {
         self.files_info.push(archive_file_entry)
     }
 
-    pub fn iter(&mut self) -> std::slice::Iter<'_, ArchiveFileEntry> {
-        self.files_info.iter()
+    pub fn iter(&mut self) -> std::slice::IterMut<'_, ArchiveFileEntry> {
+        self.files_info.iter_mut()
     }
 }
 
@@ -349,7 +347,7 @@ impl ArchiveDescriptor {
 
         let archive_file_entry = ArchiveFileEntry {
             version_made_by: 0,
-            version_needed,
+            minimum_version_needed_to_extract: version_needed,
             general_purpose_flags,
             last_mod_file_time: time,
             last_mod_file_date: date,
@@ -367,6 +365,7 @@ impl ArchiveDescriptor {
             compressor: CompressionMethod::from_compression_method(compression_method)?,
             file_comment: None,
             extra_fields: Vec::new(),
+            has_zip64_extra_field: false,
         };
 
         Ok(archive_file_entry)
@@ -389,9 +388,25 @@ pub struct ArchiveDescriptorReader {
     index: usize,
 }
 
-const U_32_LEN: usize = ::std::mem::size_of::<u32>();
-const U_16_LEN: usize = ::std::mem::size_of::<u16>();
+macro_rules! read_type {
+    ($self:expr, $stream:expr, $typ:ty) => {{
+        let upper_bound = $self.index + ::std::mem::size_of::<$typ>();
 
+        let read: [u8; ::std::mem::size_of::<$typ>()] =
+            $stream[$self.index..upper_bound].try_into().unwrap();
+        let value = <$typ>::from_le_bytes(read);
+
+        $self.index = upper_bound;
+
+        let type_str = stringify!($typ);
+        println!(
+            "read_{} value: {:} new index {:}",
+            type_str, value, $self.index
+        );
+
+        value
+    }};
+}
 impl ArchiveDescriptorReader {
     pub fn new() -> ArchiveDescriptorReader {
         ArchiveDescriptorReader { index: 0 }
@@ -402,28 +417,23 @@ impl ArchiveDescriptorReader {
     }
 
     pub fn read_u32(&mut self, stream: &[u8]) -> u32 {
-        let upper_bound = self.index + U_32_LEN;
+        read_type!(self, stream, u32)
+    }
 
-        let read: [u8; U_32_LEN] = stream[self.index..upper_bound].try_into().unwrap();
-        let value = u32::from_le_bytes(read);
-
-        self.index = upper_bound;
-
-        println!("read_u32 value: {:} new index {:}", value, self.index);
-
-        value
+    pub fn read_i32(&mut self, stream: &[u8]) -> i32 {
+        read_type!(self, stream, i32)
     }
 
     pub fn read_u16(&mut self, stream: &[u8]) -> u16 {
-        let upper_bound = self.index + U_16_LEN;
-        let read: [u8; U_16_LEN] = stream[self.index..upper_bound].try_into().unwrap();
-        let value = u16::from_le_bytes(read);
+        read_type!(self, stream, u16)
+    }
 
-        self.index = upper_bound;
+    pub fn read_u8(&mut self, stream: &[u8]) -> u8 {
+        read_type!(self, stream, u8)
+    }
 
-        println!("read_u16 value: {:?} new index {:}", value, self.index);
-
-        value
+    pub fn read_u64(&mut self, stream: &[u8]) -> u64 {
+        read_type!(self, stream, u64)
     }
 
     pub fn read_utf8_string(&mut self, stream: &[u8], string_len: usize) -> String {
@@ -559,7 +569,10 @@ impl CentralDirectoryEnd {
             self.number_of_the_disk_with_central_directory
                 .min(u16::MAX as u32) as u16,
         );
-        end_of_central_directory.write_u16(self.total_number_of_entries_on_this_disk as u16);
+        end_of_central_directory.write_u16(
+            self.total_number_of_entries_on_this_disk
+                .min(u16::MAX as u64) as u16,
+        );
         end_of_central_directory.write_u16(
             self.total_number_of_entries_in_the_central_directory
                 .min(u16::MAX as u64) as u16,
@@ -577,6 +590,8 @@ impl CentralDirectoryEnd {
         } else {
             end_of_central_directory.write_u16(0);
         };
+
+        println!("EOCD\n {:?}", self)
     }
 }
 
@@ -593,9 +608,6 @@ pub trait ExtraFields: Debug + Send + Sync {
         archive_descriptor: &mut ArchiveDescriptor,
         archive_file_entry: &ArchiveFileEntry,
     );
-
-    fn parse_file_header_data(&self, stream: &[u8]);
-    fn parse_header_extra_data(&self, stream: &[u8]);
 }
 
 //The central-directory extra field contains:
@@ -615,14 +627,16 @@ pub trait ExtraFields: Debug + Send + Sync {
 /// It can be found here (https://github.com/LuaDist/zip/blob/master/proginfo/extrafld.txt)
 ///
 #[derive(Debug, Default)]
-struct ExtendedTimestamp {
+pub struct ExtraFieldExtendedTimestamp {
     create_time: Option<i32>,
     access_time: Option<i32>,
     modify_time: Option<i32>,
     flags: u8,
 }
 
-impl ExtendedTimestamp {
+impl ExtraFieldExtendedTimestamp {
+    pub const HEADER_ID: u16 = X5455_EXTENDEDTIMESTAMP;
+
     /// The bit set inside the flags by when the last modification time is present in this extra field.
     const MODIFY_TIME_BIT: u8 = 1;
 
@@ -646,9 +660,9 @@ impl ExtendedTimestamp {
         self.modify_time = modify_time;
 
         if modify_time.is_some() {
-            self.flags |= ExtendedTimestamp::MODIFY_TIME_BIT;
+            self.flags |= ExtraFieldExtendedTimestamp::MODIFY_TIME_BIT;
         } else {
-            self.flags &= !ExtendedTimestamp::MODIFY_TIME_BIT;
+            self.flags &= !ExtraFieldExtendedTimestamp::MODIFY_TIME_BIT;
         }
     }
 
@@ -656,9 +670,9 @@ impl ExtendedTimestamp {
         self.access_time = access_time;
 
         if access_time.is_some() {
-            self.flags |= ExtendedTimestamp::ACCESS_TIME_BIT;
+            self.flags |= ExtraFieldExtendedTimestamp::ACCESS_TIME_BIT;
         } else {
-            self.flags &= !ExtendedTimestamp::ACCESS_TIME_BIT;
+            self.flags &= !ExtraFieldExtendedTimestamp::ACCESS_TIME_BIT;
         }
     }
 
@@ -666,9 +680,9 @@ impl ExtendedTimestamp {
         self.create_time = create_time;
 
         if create_time.is_some() {
-            self.flags |= ExtendedTimestamp::CREATE_TIME_BIT;
+            self.flags |= ExtraFieldExtendedTimestamp::CREATE_TIME_BIT;
         } else {
-            self.flags &= !ExtendedTimestamp::CREATE_TIME_BIT;
+            self.flags &= !ExtraFieldExtendedTimestamp::CREATE_TIME_BIT;
         }
     }
 
@@ -680,12 +694,51 @@ impl ExtendedTimestamp {
 
     fn central_header_extra_field_data_size(&self) -> u16 {
         let mut size: u16 = 1; //for flags
-        size += ((self.flags & ExtendedTimestamp::MODIFY_TIME_BIT).count_ones() * 4) as u16;
+        size +=
+            ((self.flags & ExtraFieldExtendedTimestamp::MODIFY_TIME_BIT).count_ones() * 4) as u16;
         size
+    }
+
+    pub fn parse_extra_field(
+        indexer: &mut ArchiveDescriptorReader,
+        extra_field_as_bytes: &[u8],
+        extra_field_data_size: u16,
+    ) -> Self {
+        let mut create_time: Option<i32> = None;
+        let mut access_time: Option<i32> = None;
+        let mut modify_time: Option<i32> = None;
+        let mut flags: u8 = 0;
+
+        match extra_field_data_size {
+            0 => {}
+            1..=4 => flags = indexer.read_u8(extra_field_as_bytes),
+            5..=8 => {
+                flags = indexer.read_u8(extra_field_as_bytes);
+                modify_time = Some(indexer.read_i32(extra_field_as_bytes))
+            }
+            9..=13 => {
+                flags = indexer.read_u8(extra_field_as_bytes);
+                modify_time = Some(indexer.read_i32(extra_field_as_bytes));
+                access_time = Some(indexer.read_i32(extra_field_as_bytes))
+            }
+            _ => {
+                flags = indexer.read_u8(extra_field_as_bytes);
+                modify_time = Some(indexer.read_i32(extra_field_as_bytes));
+                access_time = Some(indexer.read_i32(extra_field_as_bytes));
+                create_time = Some(indexer.read_i32(extra_field_as_bytes))
+            }
+        }
+
+        Self {
+            create_time,
+            access_time,
+            modify_time,
+            flags,
+        }
     }
 }
 
-impl ExtraFields for ExtendedTimestamp {
+impl ExtraFields for ExtraFieldExtendedTimestamp {
     fn file_header_extra_field_size(&self) -> u16 {
         4 + self.file_header_extra_field_data_size()
     }
@@ -715,21 +768,13 @@ impl ExtraFields for ExtendedTimestamp {
         archive_descriptor: &mut ArchiveDescriptor,
         _archive_file_entry: &ArchiveFileEntry,
     ) {
-        archive_descriptor.write_u16(X5455_EXTENDEDTIMESTAMP);
+        archive_descriptor.write_u16(ExtraFieldExtendedTimestamp::HEADER_ID);
         archive_descriptor.write_u16(self.file_header_extra_field_data_size());
         archive_descriptor.write_u8(self.flags); //     The bit set inside the flags by when the last modification time is present in this extra field.
 
         if let Some(modify_time) = self.modify_time {
             archive_descriptor.write_i32(modify_time);
         }
-    }
-
-    fn parse_file_header_data(&self, _stream: &[u8]) {
-        todo!()
-    }
-
-    fn parse_header_extra_data(&self, _stream: &[u8]) {
-        todo!()
     }
 }
 
@@ -747,17 +792,47 @@ impl ExtraFields for ExtendedTimestamp {
 ///
 /// Note: all fields stored in Intel low-byte/high-byte order.
 #[derive(Debug)]
-struct ZIP64ExtendedInformationExtraField {}
+pub struct ExtraFieldZIP64ExtendedInformation {}
 
-impl ZIP64ExtendedInformationExtraField {
-    const ZIP64_TAG: u16 = 0x0001;
+impl ExtraFieldZIP64ExtendedInformation {
+    pub const HEADER_ID: u16 = 0x0001;
     const ZIP64_EXTRA_FIELD_SIZE: u16 = 8 * 3 + 4;
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {}
+    }
+
+    pub fn parse_extra_field(
+        indexer: &mut ArchiveDescriptorReader,
+        extra_field_as_bytes: &[u8],
+        extra_field_data_size: u16,
+        archive_file_entry: &mut ArchiveFileEntry,
+    ) -> Self {
+        match extra_field_data_size {
+            0..=7 => { //Nothing worthy}
+            }
+            8..=15 => archive_file_entry.uncompressed_size = indexer.read_u64(extra_field_as_bytes),
+            16..=23 => {
+                archive_file_entry.uncompressed_size = indexer.read_u64(extra_field_as_bytes);
+                archive_file_entry.compressed_size = indexer.read_u64(extra_field_as_bytes);
+            }
+            24..=31 => {
+                archive_file_entry.uncompressed_size = indexer.read_u64(extra_field_as_bytes);
+                archive_file_entry.compressed_size = indexer.read_u64(extra_field_as_bytes);
+                archive_file_entry.offset = indexer.read_u64(extra_field_as_bytes);
+            }
+            _ => {
+                archive_file_entry.uncompressed_size = indexer.read_u64(extra_field_as_bytes);
+                archive_file_entry.compressed_size = indexer.read_u64(extra_field_as_bytes);
+                archive_file_entry.offset = indexer.read_u64(extra_field_as_bytes);
+                archive_file_entry.file_disk_number = indexer.read_u32(extra_field_as_bytes);
+            }
+        }
+
+        Self::new()
     }
 }
 
-impl ExtraFields for ZIP64ExtendedInformationExtraField {
+impl ExtraFields for ExtraFieldZIP64ExtendedInformation {
     fn file_header_extra_field_size(&self) -> u16 {
         todo!()
     }
@@ -769,11 +844,13 @@ impl ExtraFields for ZIP64ExtendedInformationExtraField {
     fn file_header_write_data(
         &self,
         archive_descriptor: &mut ArchiveDescriptor,
-        _archive_file_entry: &ArchiveFileEntry,
+        archive_file_entry: &ArchiveFileEntry,
     ) {
-        if _archive_file_entry.uncompressed_size == 0 {
+        if archive_file_entry.uncompressed_size == 0 {
             archive_descriptor
-                .write_zeros(ZIP64ExtendedInformationExtraField::ZIP64_EXTRA_FIELD_SIZE as usize);
+                .write_zeros(ExtraFieldZIP64ExtendedInformation::ZIP64_EXTRA_FIELD_SIZE as usize);
+        } else {
+            self.central_header_extra_write_data(archive_descriptor, archive_file_entry);
         }
     }
 
@@ -792,9 +869,9 @@ impl ExtraFields for ZIP64ExtendedInformationExtraField {
             8
         };
 
-        archive_descriptor.write_u16(ZIP64ExtendedInformationExtraField::ZIP64_TAG);
+        archive_descriptor.write_u16(ExtraFieldZIP64ExtendedInformation::HEADER_ID);
         archive_descriptor
-            .write_u16(ZIP64ExtendedInformationExtraField::ZIP64_EXTRA_FIELD_SIZE.min(size));
+            .write_u16(ExtraFieldZIP64ExtendedInformation::ZIP64_EXTRA_FIELD_SIZE.min(size));
 
         archive_descriptor.write_u64(archive_file_entry.uncompressed_size);
 
@@ -808,22 +885,59 @@ impl ExtraFields for ZIP64ExtendedInformationExtraField {
             }
         }
     }
+}
 
-    fn parse_file_header_data(&self, stream: &[u8]) {
-        self.parse_header_extra_data(stream);
+#[derive(Debug)]
+pub struct ExtraFieldUnknown {
+    header_id: u16,
+    data: Vec<u8>,
+}
+
+impl ExtraFieldUnknown {
+    pub fn parse_extra_field(
+        indexer: &mut ArchiveDescriptorReader,
+        extra_field_as_bytes: &[u8],
+        extra_field_data_size: u16,
+        header_id: u16,
+    ) -> Self {
+        let data = indexer.read_bytes(extra_field_as_bytes, extra_field_data_size as usize);
+        Self { header_id, data }
+    }
+}
+
+impl ExtraFields for ExtraFieldUnknown {
+    fn file_header_extra_field_size(&self) -> u16 {
+        self.central_header_extra_field_size()
     }
 
-    fn parse_header_extra_data(&self, _stream: &[u8]) {
-        todo!()
+    fn central_header_extra_field_size(&self) -> u16 {
+        self.data.len() as u16
+    }
+
+    fn file_header_write_data(
+        &self,
+        archive_descriptor: &mut ArchiveDescriptor,
+        archive_file_entry: &ArchiveFileEntry,
+    ) {
+        self.central_header_extra_write_data(archive_descriptor, archive_file_entry)
+    }
+
+    fn central_header_extra_write_data(
+        &self,
+        archive_descriptor: &mut ArchiveDescriptor,
+        _archive_file_entry: &ArchiveFileEntry,
+    ) {
+        archive_descriptor.write_u16(self.header_id);
+        archive_descriptor.write_u16(self.central_header_extra_field_size());
+        archive_descriptor.write_bytes(&self.data);
     }
 }
 
 #[cfg(test)]
 mod test {
 
-    use crate::constants::LOCAL_FILE_HEADER_SIGNATURE;
-
     use super::*;
+    use crate::constants::LOCAL_FILE_HEADER_SIGNATURE;
 
     #[test]
     fn test_write_file_header() {

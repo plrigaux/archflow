@@ -1,4 +1,7 @@
-use crate::archive_common::{ArchiveDescriptorReader, CentralDirectoryEnd};
+use crate::archive_common::{
+    ArchiveDescriptorReader, CentralDirectoryEnd, ExtraFieldExtendedTimestamp, ExtraFieldUnknown,
+    ExtraFieldZIP64ExtendedInformation, ExtraFields,
+};
 use crate::compression::CompressionMethod;
 use crate::constants::{CENTRAL_DIRECTORY_ENTRY_BASE_SIZE, CENTRAL_DIRECTORY_ENTRY_SIGNATURE};
 use crate::types::ArchiveFileEntry;
@@ -36,7 +39,16 @@ impl<R: Read + Seek> ArchiveReader<R> {
         //find central dir end
 
         let file_length = reader.seek(SeekFrom::End(0))?;
-        let mut position = file_length - END_OF_CENTRAL_DIRECTORY_SIZE;
+
+        let mut position: u64 = match file_length.checked_sub(END_OF_CENTRAL_DIRECTORY_SIZE) {
+            Some(p) => p,
+            None => {
+                return Err(ArchiveError::BadArchiveStructure(
+                    "Archive too small".to_owned(),
+                ))
+            }
+        };
+
         //let mut pos = file_length - 4;
         let search_upper_bound =
             file_length.saturating_sub(END_OF_CENTRAL_DIRECTORY_SIZE + u16::MAX as u64);
@@ -55,9 +67,10 @@ impl<R: Read + Seek> ArchiveReader<R> {
 
             let val = reader.read_u32::<LittleEndian>()?;
 
-            println!("val {:0X} ", val);
+            //println!("val {:0X} ", val);
             if val == CENTRAL_DIRECTORY_END_SIGNATURE {
-                println!("CENTRAL_DIRECTORY_END_SIGNATURE found at {}", position);
+                let signature = stringify!(CENTRAL_DIRECTORY_END_SIGNATURE);
+                println!("{signature} found at {}", position);
                 break;
             }
             /*             if reader.read_u32::<LittleEndian>()? == CENTRAL_DIRECTORY_END_SIGNATURE {
@@ -70,9 +83,10 @@ impl<R: Read + Seek> ArchiveReader<R> {
             position = match position.checked_sub(1) {
                 Some(p) => p,
                 None => {
-                    return Err(ArchiveError::BadArchiveStructure(
-                        "CENTRAL_DIRECTORY_END_SIGNATURE Not found".to_owned(),
-                    ))
+                    let signature = stringify!(CENTRAL_DIRECTORY_END_SIGNATURE);
+                    return Err(ArchiveError::BadArchiveStructure(format!(
+                        "Signature {signature} Not found"
+                    )));
                 }
             };
         }
@@ -121,6 +135,12 @@ impl<R: Read + Seek> ArchiveReader<R> {
             let signature = indexer.read_u32(&central_directory_buffer);
 
             if signature != CENTRAL_DIRECTORY_ENTRY_SIGNATURE {
+                println!(
+                    "I got {:0X}, I expect {:0X}",
+                    signature, CENTRAL_DIRECTORY_ENTRY_SIGNATURE
+                );
+
+                println!("{:X?}", central_directory_buffer);
                 return Err(ArchiveError::BadArchiveStructure(
                     "Central directory signature not found!".to_owned(),
                 ));
@@ -147,26 +167,9 @@ impl<R: Read + Seek> ArchiveReader<R> {
 
             let compressor = CompressionMethod::from_compression_method(compression_method)?;
 
-            let extra_fields = if extra_field_length != 0 {
-                let _extra_field_as_bytes =
-                    indexer.read_bytes(&central_directory_buffer, extra_field_length as usize);
-                todo!();
-            } else {
-                Vec::new()
-            };
-
-            let file_comment = if file_comment_length != 0 {
-                let file_comment_as_bytes =
-                    indexer.read_bytes(&central_directory_buffer, file_comment_length as usize);
-
-                Some(file_comment_as_bytes)
-            } else {
-                None
-            };
-
-            let archive_file_entry = ArchiveFileEntry {
+            let mut archive_file_entry = ArchiveFileEntry {
                 version_made_by,
-                version_needed,
+                minimum_version_needed_to_extract: version_needed,
                 general_purpose_flags,
                 compression_method,
                 last_mod_file_time,
@@ -182,13 +185,31 @@ impl<R: Read + Seek> ArchiveReader<R> {
                 internal_file_attributes,
                 external_file_attributes,
                 file_disk_number: file_disk_number as u32,
-                extra_fields,
-                file_comment,
+                extra_fields: Vec::new(),
+                file_comment: None,
+                has_zip64_extra_field: false,
             };
 
+            if extra_field_length != 0 {
+                //TODO avoid copy
+                let extra_field_as_bytes =
+                    indexer.read_bytes(&central_directory_buffer, extra_field_length as usize);
+
+                parse_extra_fields(extra_field_as_bytes, &mut archive_file_entry);
+            }
+
+            if file_comment_length != 0 {
+                let file_comment_as_bytes =
+                    indexer.read_bytes(&central_directory_buffer, file_comment_length as usize);
+
+                archive_file_entry.file_comment = Some(file_comment_as_bytes)
+            }
+
+            println!("File entry info: {:#?}", archive_file_entry);
             entries.push(archive_file_entry);
 
             println!("Parsed entry: {}", i);
+
             println!("-------------------------------------------");
             println!("index {}", indexer.get_index());
 
@@ -232,6 +253,53 @@ impl<R: Read + Seek> ArchiveReader<R> {
 
         Ok(central_directory_end)
     }
+}
+
+fn parse_extra_fields(
+    extra_field_as_bytes: Vec<u8>,
+    archive_file_entry: &mut ArchiveFileEntry,
+) -> Vec<Box<dyn ExtraFields>> {
+    let mut indexer = ArchiveDescriptorReader::new();
+    let extra_fields = Vec::with_capacity(10);
+
+    while indexer.get_index() + 4 <= extra_field_as_bytes.len() {
+        let extra_field_header_id = indexer.read_u16(&extra_field_as_bytes);
+        let extra_field_data_size = indexer.read_u16(&extra_field_as_bytes);
+
+        let extra_field: Box<dyn ExtraFields> = match extra_field_header_id {
+            ExtraFieldZIP64ExtendedInformation::HEADER_ID => {
+                let ef = ExtraFieldZIP64ExtendedInformation::parse_extra_field(
+                    &mut indexer,
+                    &extra_field_as_bytes,
+                    extra_field_data_size,
+                    archive_file_entry,
+                );
+                Box::new(ef)
+            }
+            ExtraFieldExtendedTimestamp::HEADER_ID => {
+                let ef = ExtraFieldExtendedTimestamp::parse_extra_field(
+                    &mut indexer,
+                    &extra_field_as_bytes,
+                    extra_field_data_size,
+                );
+
+                Box::new(ef)
+            }
+            _ => {
+                let ef = ExtraFieldUnknown::parse_extra_field(
+                    &mut indexer,
+                    &extra_field_as_bytes,
+                    extra_field_data_size,
+                    extra_field_header_id,
+                );
+                Box::new(ef)
+            }
+        };
+
+        archive_file_entry.extra_fields.push(extra_field);
+    }
+
+    extra_fields
 }
 
 impl<R: Read + Seek> Debug for ArchiveReader<R> {

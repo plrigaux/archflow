@@ -3,8 +3,8 @@ use super::write_wrapper::{CommonWrapper, WriteSeekWrapper, WriteWrapper};
 
 use crate::archive_common::{
     build_central_directory_end, build_central_directory_file_header, build_data_descriptor,
-    build_file_header, build_file_sizes_update, is_streaming, ArchiveDescriptor, SubZipArchiveData,
-    ZipArchiveCommon,
+    build_file_header, build_file_sizes_update, is_streaming, ArchiveDescriptor,
+    ExtraFieldZIP64ExtendedInformation, SubZipArchiveData, ZipArchiveCommon,
 };
 use crate::compress::FileOptions;
 use crate::compression::Level;
@@ -113,7 +113,7 @@ impl<'a, W: Write + 'a> ZipArchive<'a, W> {
 
         let file_begin = self.sink.stream_position()?;
 
-        let uncompressed_size = compress(
+        let (uncompressed_size, is_text) = compress(
             compressor,
             &mut self.sink,
             payload,
@@ -128,7 +128,8 @@ impl<'a, W: Write + 'a> ZipArchive<'a, W> {
         archive_file_entry.crc32 = crc32;
         archive_file_entry.compressed_size = compressed_size;
         archive_file_entry.uncompressed_size = uncompressed_size;
-
+        archive_file_entry.apparently_text_file(is_text);
+        
         if is_streaming(archive_file_entry.general_purpose_flags) {
             let data_descriptor = build_data_descriptor(&archive_file_entry);
             self.sink.write_all(data_descriptor.buffer())?;
@@ -167,6 +168,13 @@ impl<'a, W: Write + 'a> ZipArchive<'a, W> {
             }
         }
 
+        if !archive_file_entry.has_zip64_extra_field && archive_file_entry.is_zip64() {
+            let zip_extra_field = ExtraFieldZIP64ExtendedInformation::new();
+            archive_file_entry
+                .extra_fields
+                .push(Box::new(zip_extra_field));
+        }
+
         self.data.add_archive_file_entry(archive_file_entry);
 
         self.data.archive_size = self.sink.get_written_bytes_count()?;
@@ -182,13 +190,17 @@ impl<'a, W: Write + 'a> ZipArchive<'a, W> {
         W: Write,
     {
         let central_directory_offset = self.sink.get_written_bytes_count()?;
-
+        println!(
+            "central_directory_offset  {:?}  {:0X}",
+            central_directory_offset, central_directory_offset
+        );
         let mut central_directory_header = ArchiveDescriptor::new(500);
 
-        let mut has_a_zip64_file = false;
         for file_info in self.data.iter() {
-            has_a_zip64_file |=
-                build_central_directory_file_header(&mut central_directory_header, file_info);
+            let off = self.sink.get_written_bytes_count()?;
+            println!("FILE OFFSET  {:?}  {:0X}", off, off);
+
+            build_central_directory_file_header(&mut central_directory_header, file_info);
 
             self.sink.write_all(central_directory_header.buffer())?;
             central_directory_header.clear();
@@ -201,7 +213,6 @@ impl<'a, W: Write + 'a> ZipArchive<'a, W> {
             &mut self.data,
             central_directory_offset,
             central_directory_size,
-            has_a_zip64_file,
         );
 
         self.sink.write_all(end_of_central_directory.buffer())?;

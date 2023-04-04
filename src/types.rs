@@ -2,7 +2,10 @@ extern crate chrono;
 use core::fmt;
 use std::{u16, u8};
 
-use crate::{archive_common::ExtraFields, compression::CompressionMethod};
+use crate::{
+    archive_common::ExtraFields, compression::CompressionMethod,
+    constants::VERSION_USES_ZIP64_FORMAT_EXTENSIONS,
+};
 use chrono::{DateTime, Datelike, Local, NaiveDate, TimeZone, Timelike, Utc};
 
 /// The archive file complete information.
@@ -11,7 +14,7 @@ use chrono::{DateTime, Datelike, Local, NaiveDate, TimeZone, Timelike, Utc};
 #[derive(Debug)]
 pub struct ArchiveFileEntry {
     pub version_made_by: u16,
-    pub version_needed: u16,
+    pub minimum_version_needed_to_extract: u16,
     pub general_purpose_flags: u16,
     pub compression_method: u16,
     pub last_mod_file_time: u16,
@@ -29,15 +32,16 @@ pub struct ArchiveFileEntry {
     pub external_file_attributes: u32,
     pub file_comment: Option<Vec<u8>>,
     pub extra_fields: Vec<Box<dyn ExtraFields>>,
+    pub has_zip64_extra_field: bool,
 }
 
 impl ArchiveFileEntry {
-    pub fn version_needed(&self) -> u16 {
-        // higher versions matched first
-        match self.compressor {
-            CompressionMethod::Zstd() => 63,
-            CompressionMethod::BZip2() => 46,
-            _ => 20,
+    pub fn version_needed_to_extract(&self) -> u16 {
+        if self.is_zip64() {
+            self.minimum_version_needed_to_extract
+                .max(VERSION_USES_ZIP64_FORMAT_EXTENSIONS)
+        } else {
+            self.minimum_version_needed_to_extract
         }
     }
 
@@ -80,19 +84,29 @@ impl ArchiveFileEntry {
     }
 
     pub fn zip64_compressed_size(&self) -> u32 {
-        if self.compressed_size >= u32::MAX as u64 {
-            u32::MAX
-        } else {
-            self.compressed_size as u32
-        }
+        self.compressed_size.min(u32::MAX as u64) as u32
     }
 
     pub fn zip64_uncompressed_size(&self) -> u32 {
-        if self.uncompressed_size >= u32::MAX as u64 {
-            u32::MAX
+        self.uncompressed_size.min(u32::MAX as u64) as u32
+    }
+
+    pub fn zip64_offset(&self) -> u32 {
+        self.offset.min(u32::MAX as u64) as u32
+    }
+
+    const TEXT_INDICATOR: u16 = 1;
+
+    pub fn apparently_text_file(&mut self, is_text: bool) {
+        if is_text {
+            self.internal_file_attributes |= ArchiveFileEntry::TEXT_INDICATOR
         } else {
-            self.uncompressed_size as u32
+            self.internal_file_attributes &= !ArchiveFileEntry::TEXT_INDICATOR
         }
+    }
+
+    pub fn is_apparently_text_file(&self) -> bool {
+        self.internal_file_attributes & ArchiveFileEntry::TEXT_INDICATOR != 0
     }
 }
 
@@ -119,7 +133,15 @@ impl fmt::Display for ArchiveFileEntry {
             self.system_origin()
         )?;
 
-        let (major, minor) = ArchiveFileEntry::pretty_version(self.version_needed);
+        let (major, minor) = ArchiveFileEntry::pretty_version(self.version_made_by);
+        writeln!(
+            f,
+            "{: <padding$}{}.{}",
+            "version of encoding software:", major, minor
+        )?;
+
+        let (major, minor) =
+            ArchiveFileEntry::pretty_version(self.minimum_version_needed_to_extract);
         writeln!(
             f,
             "{: <padding$}{}.{}",
@@ -178,7 +200,7 @@ impl fmt::Display for ArchiveFileEntry {
 
         writeln!(
             f,
-            "{: <padding$}{:x}",
+            "{: <padding$}{:08x}",
             "32-bit CRC value (hex):", self.crc32
         )?;
 
@@ -204,12 +226,35 @@ impl fmt::Display for ArchiveFileEntry {
             "{: <padding$}{:} bytes",
             "length of extra field:", self.extra_field_length
         )?;
+
         writeln!(
             f,
             "{: <padding$}{:} characters",
             "length of file comment:",
             self.file_comment_length()
         )?;
+
+        writeln!(
+            f,
+            "{: <padding$}disk {:}",
+            "disk number on which file begins:",
+            (self.file_disk_number + 1)
+        )?;
+
+        let file_type = if self.is_apparently_text_file() {
+            "text"
+        } else {
+            "binary"
+        };
+        writeln!(f, "{: <padding$}{:}", "apparent file type:", file_type)?;
+
+        if !self.extra_fields.is_empty() {
+            writeln!(
+                f,
+                "{: <padding$}",
+                "\nThe central-directory extra field contains:",
+            )?;
+        }
 
         if let Some(comment) = &self.file_comment {
             writeln!(

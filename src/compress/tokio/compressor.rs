@@ -3,30 +3,31 @@ use crc32fast::Hasher;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 use crate::{
+    compress::common::is_text_buf,
     compression::{CompressionMethod, Level},
     error::ArchiveError,
 };
 
-macro_rules! compress_tokio {
-    ( $encoder:expr, $hasher:expr, $reader:expr, $overtcp:expr) => {{
+macro_rules! compress_common {
+    ( $encoder:expr, $hasher:expr, $reader:expr) => {{
         let mut buf = vec![0; 4096];
         let mut total_read: u64 = 0;
 
-        loop {
-            let read = $reader.read(&mut buf).await?;
-            if read == 0 {
-                break;
-            }
+        let mut read = $reader.read(&mut buf).await?;
+        let is_text = is_text_buf(&buf[..read]);
 
+        while read != 0 {
             total_read += read as u64;
             $hasher.update(&buf[..read]);
             $encoder.write_all(&buf[..read]).await?;
             //self.sink.write_all(&buf[..read]).await?; // Payload chunk.
+
+            read = $reader.read(&mut buf).await?;
         }
         $encoder.flush().await?;
 
         $encoder.shutdown().await?;
-        total_read
+        (total_read, is_text)
     }};
 }
 
@@ -48,7 +49,7 @@ pub async fn compress<'a, R, W>(
     reader: &'a mut R,
     hasher: &'a mut Hasher,
     compression_level: Level,
-) -> Result<u64, ArchiveError>
+) -> Result<(u64, bool), ArchiveError>
 where
     R: AsyncRead + Unpin,
     W: AsyncWrite + Unpin,
@@ -64,24 +65,24 @@ where
             let mut buf = vec![0; 4096];
             let mut total_read: u64 = 0;
 
-            loop {
-                let read = reader.read(&mut buf).await?;
-                if read == 0 {
-                    break;
-                }
+            let mut read = reader.read(&mut buf).await?;
+            let is_text = is_text_buf(&buf[..read]);
 
+            while read != 0 {
                 total_read += read as u64;
                 hasher.update(&buf[..read]);
                 writer.write_all(&buf[..read]).await?;
+
+                read = reader.read(&mut buf).await?;
             }
             writer.flush().await?;
 
-            Ok(total_read)
+            Ok((total_read, is_text))
         }
         CompressionMethod::Deflate() => {
             let mut zencoder = DeflateEncoder::with_quality(writer, compression_level.into());
 
-            let total_read = compress_tokio!(zencoder, hasher, reader, overtcp);
+            let total_read = compress_common!(zencoder, hasher, reader);
 
             Ok(total_read)
         }
@@ -89,7 +90,7 @@ where
         CompressionMethod::BZip2() => {
             let mut encoder = BzEncoder::with_quality(writer, compression_level.into());
 
-            let total_read = compress_tokio!(encoder, hasher, reader, overtcp);
+            let total_read = compress_common!(encoder, hasher, reader);
 
             Ok(total_read)
         }
@@ -97,7 +98,7 @@ where
         CompressionMethod::Zstd() => {
             let mut encoder = ZstdEncoder::with_quality(writer, compression_level.into());
 
-            let total_read = compress_tokio!(encoder, hasher, reader, overtcp);
+            let total_read = compress_common!(encoder, hasher, reader);
 
             Ok(total_read)
         }
@@ -105,7 +106,7 @@ where
             //let bw = BufWriter::new(writer);
             let mut encoder = XzEncoder::with_quality(writer, compression_level.into());
 
-            let total_read = compress_tokio!(encoder, hasher, reader, overtcp);
+            let total_read = compress_common!(encoder, hasher, reader);
 
             Ok(total_read)
         }

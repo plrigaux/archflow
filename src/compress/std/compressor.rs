@@ -7,6 +7,7 @@ use flate2::{write::DeflateEncoder, Compression};
 use xz2::write::XzEncoder;
 
 use crate::{
+    compress::common::is_text_buf,
     compression::{CompressionMethod, Level},
     error::ArchiveError,
 };
@@ -16,19 +17,17 @@ macro_rules! compress_common {
         let mut buf = vec![0; 4096];
         let mut total_read: u64 = 0;
 
-        loop {
-            let read = $reader.read(&mut buf)?;
-            if read == 0 {
-                break;
-            }
-
+        let mut read = $reader.read(&mut buf)?;
+        let is_text = is_text_buf(&buf[..read]);
+        while read != 0 {
             total_read += read as u64;
             $hasher.update(&buf[..read]);
             $encoder.write_all(&buf[..read])?;
+            read = $reader.read(&mut buf)?;
         }
         $encoder.finish()?;
 
-        total_read
+        (total_read, is_text)
     }};
 }
 
@@ -74,7 +73,7 @@ pub fn compress<'a, R, W>(
     reader: &'a mut R,
     hasher: &'a mut Hasher,
     compression_level: Level,
-) -> Result<u64, ArchiveError>
+) -> Result<(u64, bool), ArchiveError>
 where
     R: Read,
     W: Write + ?Sized,
@@ -84,20 +83,21 @@ where
             let mut buf = vec![0; 4096];
             let mut total_read: u64 = 0;
 
-            loop {
-                let read = reader.read(&mut buf)?;
-                if read == 0 {
-                    break;
-                }
+            let mut read = reader.read(&mut buf)?;
+            let is_text = is_text_buf(&buf[..read]);
 
+            while read != 0 {
                 total_read += read as u64;
                 hasher.update(&buf[..read]);
                 writer.write_all(&buf[..read])?;
+
+                read = reader.read(&mut buf)?;
             }
             writer.flush()?;
 
-            Ok(total_read)
+            Ok((total_read, is_text))
         }
+
         CompressionMethod::Deflate() => {
             let mut encoder = DeflateEncoder::new(writer, compression_level.into());
 
