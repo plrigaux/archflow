@@ -13,6 +13,22 @@
 //!
 //!
 //! ## Features
+//! - Stream on the fly an archive in one pass (i.e. no seek).
+//! - [tokio](https://docs.rs/tokio/latest/tokio/io/index.html) `AsyncRead` / `AsyncWrite` and `AsyncSeek` compatible.
+//! - [std::io](https://doc.rust-lang.org/std/io/index.html) `Read` / `Write` and `Seek` compatible
+//! - File type detection (text or binary)
+//! - Zip64 format (archive size over 4Gb)
+//! - Unix time
+//!
+//! Support the following compression formats:
+//! - stored (i.e. none)
+//! - deflate
+//! - bzip2
+//! - zstd
+//! - xz
+//!
+//! ## Cargo features
+//! When included in you project, you have the choice to choose the [tokio](https://tokio.rs/) (asynchronous) or standard version.
 //!
 //! Feature  | Description
 //! ---------|------
@@ -191,6 +207,7 @@
 //!
 //!
 //! ## Disclaimer
+//! The library is in construction and not stable. More tests need to be done.
 //!
 //!This implementation is inspired by :
 //!- <https://github.com/scotow/zipit> and

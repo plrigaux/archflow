@@ -1,3 +1,4 @@
+//! <!--
 //! This table shows the interpretation of the archive structure.
 //!
 //! <table>
@@ -38,7 +39,7 @@
 //! </td>
 //! </tr>
 //! </table>
-//!
+//! -->
 //!
 //!
 
@@ -66,6 +67,12 @@ pub struct FileOptions<'a> {
     /// The file modified time.
     pub last_modified_time: FileDateTime,
 
+    /// The file creation time.
+    pub last_creation_time: Option<i32>,
+
+    /// The file modified time.
+    pub last_access_time: Option<i32>,
+
     /// Unix permissions.
     pub permissions: Option<u32>,
 
@@ -77,6 +84,9 @@ pub struct FileOptions<'a> {
 
     /// Indicator of fize size > (u32::MAX)
     pub large_file: bool,
+
+    /// Is the compressor will check the apparent file type
+    pub detect_file_type: bool,
 }
 
 impl<'a> FileOptions<'a> {
@@ -128,9 +138,43 @@ impl<'a> FileOptions<'a> {
     /// If set to `false` and the file exceeds the limit, the exra field will be replace by a data descriptor. If set to `true`,
     /// readers will require ZIP64 support and if the file does not exceed the limit, 20 B are
     /// wasted. The default is `false`.
-    #[must_use]
     pub fn large_file(mut self, large: bool) -> FileOptions<'a> {
         self.large_file = large;
+        self
+    }
+
+    /// Set an indicator to the archiver to detect the entry file type.
+    ///
+    /// The archiver will read first bytes of the entry to detect if it is a plain text or
+    ///  a binary file.
+    ///
+    /// More information detailed there: [txtvsbin.txt](https://github.com/LuaDist/zip/blob/master/proginfo/txtvsbin.txt)
+    ///
+    /// Default value: true
+    pub fn detect_file_type(mut self, detect_file_type: bool) -> FileOptions<'a> {
+        self.detect_file_type = detect_file_type;
+        self
+    }
+
+    /// Set the entry unix timestamp.
+    ///
+    /// The time values are in standard Unix signed-long format, indicating
+    /// the number of seconds since 1 January 1970 00:00:00.
+    ///
+    /// all argumets are __optional__
+    pub fn time_stamp(
+        mut self,
+        last_modification_time: Option<i32>,
+        last_access_time: Option<i32>,
+        last_creation_time: Option<i32>,
+    ) -> FileOptions<'a> {
+        self.last_modified_time = if let Some(last_modification_time) = last_modification_time {
+            FileDateTime::UnixCustom(last_modification_time)
+        } else {
+            FileDateTime::Zero
+        };
+        self.last_access_time = last_access_time;
+        self.last_creation_time = last_creation_time;
         self
     }
 }
@@ -146,6 +190,9 @@ impl<'a> Default for FileOptions<'a> {
             system: FileCompatibilitySystem::Unix,
             comment: None,
             large_file: false,
+            detect_file_type: true,
+            last_creation_time: None,
+            last_access_time: None,
         }
     }
 }

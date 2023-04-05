@@ -247,7 +247,7 @@ dependencies = [
 
 [[package]]
 name = "archflow"
-version = "0.0.2"
+version = "0.1.0"
 dependencies = [
  "actix-web",
  "archflow",

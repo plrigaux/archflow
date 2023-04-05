@@ -1,34 +1,5 @@
 # Archflow
 
-
-https://pkware.cachefly.net/webdocs/casestudies/APPNOTE.TXT
-
-
-## Features
-- Stream on the fly an archive from multiple AsyncRead objects.
-- Single read / seek free implementation (the CRC and file size are calculated while streaming and are sent afterwards).
-- [tokio](https://docs.rs/tokio/latest/tokio/io/index.html) `AsyncRead` / `AsyncWrite` and `AsyncSeek` compatible. 
-- [std::io](https://doc.rust-lang.org/std/io/index.html) `Read` / `Write` and `Seek` compatible
-
-Support the following compression formats:
- - stored (i.e. none)
- - deflate
- - bzip2
- - zstd
- - xz
-
-## Todos
-
-- implement zip64
-- implement some zip features (unix time, file comments, ...)
-- add more cargo features like for compressors selection
-
-## Examples
-
-- How to create a zip archive
-- How to stream an aschive with Hyper
-.
-
 <!-- cargo-sync-readme start -->
 
  A library for creating ZIP archives in one pass. This is useful when when it is not possible to
@@ -46,6 +17,22 @@ Support the following compression formats:
 
 
  ## Features
+ - Stream on the fly an archive in one pass (i.e. no seek).
+ - [tokio](https://docs.rs/tokio/latest/tokio/io/index.html) `AsyncRead` / `AsyncWrite` and `AsyncSeek` compatible.
+ - [std::io](https://doc.rust-lang.org/std/io/index.html) `Read` / `Write` and `Seek` compatible
+ - File type detection (text or binary)
+ - Zip64 format (archive size over 4Gb)
+ - Unix time
+
+ Support the following compression formats:
+ - stored (i.e. none)
+ - deflate
+ - bzip2
+ - zstd
+ - xz
+
+ ## Cargo features
+ When included in you project, you have the choice to choose the [tokio](https://tokio.rs/) (asynchronous) or standard version.
 
  Feature  | Description
  ---------|------
@@ -224,6 +211,7 @@ Support the following compression formats:
 
 
  ## Disclaimer
+ The library is in construction and not stable. More tests need to be done.
 
 This implementation is inspired by :
 - <https://github.com/scotow/zipit> and

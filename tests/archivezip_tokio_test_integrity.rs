@@ -8,7 +8,7 @@ use archflow::{
 };
 mod common;
 
-use common::tokio::create_new_clean_file;
+use common::tokio::{create_new_clean_file, get_out_file};
 
 #[tokio::test]
 async fn archive_multiple() -> Result<(), ArchiveError> {
@@ -31,8 +31,12 @@ async fn archive_multiple() -> Result<(), ArchiveError> {
         .compression_method(CompressionMethod::Store())
         .set_file_comment("This is a store file");
     archive
-        .append("file4.txt", &options, &mut b"Some string data".as_ref())
+        .append("file3.txt", &options, &mut b"Some string data".as_ref())
         .await?;
+
+    let path = Path::new("tests/resources/rust-mascot.png");
+    let mut in_file = File::open(path).await?;
+    archive.append("marcot.png", &options, &mut in_file).await?;
 
     archive.set_archive_comment("This is a comment for the archive, This is a comment for the archive, This is a comment for the archive, This is a comment for the archive");
     let (archive_size, out_file) = archive.finalize().await?;
@@ -41,7 +45,7 @@ async fn archive_multiple() -> Result<(), ArchiveError> {
 
     println!("Archive file {:?}", out_file);
 
-    let out_file_path = Path::new("/tmp/archflow/std/test_multiple.zip");
+    let out_file_path = get_out_file(out_file_name);
     let out_file = std::fs::File::open(out_file_path).unwrap();
 
     let archive_read = ArchiveReader::new(out_file).unwrap();
@@ -54,7 +58,7 @@ async fn archive_multiple() -> Result<(), ArchiveError> {
         archive_read
             .central_directory_end
             .total_number_of_entries_in_the_central_directory,
-        3
+        4
     );
 
     assert_eq!(
@@ -68,10 +72,12 @@ async fn archive_multiple() -> Result<(), ArchiveError> {
     let entry1 = iter.next().unwrap();
     let entry2 = iter.next().unwrap();
     let entry3 = iter.next().unwrap();
+    let entry4 = iter.next().unwrap();
 
     assert_eq!("file1.txt", entry1.get_file_name());
     assert_eq!("file2.txt", entry2.get_file_name());
-    assert_eq!("file4.txt", entry3.get_file_name());
+    assert_eq!("file3.txt", entry3.get_file_name());
+    assert_eq!("marcot.png", entry4.get_file_name());
     //test time
 
     //test compression meth
@@ -110,7 +116,7 @@ async fn archive_multiple_norm() -> Result<(), ArchiveError> {
 
     println!("Archive file {:?}", out_file);
 
-    let out_file_path = Path::new("/tmp/archflow/std/test_multiple.zip");
+    let out_file_path = get_out_file(out_file_name);
     let out_file = std::fs::File::open(out_file_path).unwrap();
 
     let archive_read = ArchiveReader::new(out_file).unwrap();

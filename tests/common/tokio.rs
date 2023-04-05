@@ -1,11 +1,18 @@
 #![allow(dead_code)]
 use ::std::path::Path;
-use std::task::Poll;
+use std::{path::PathBuf, task::Poll};
 use tokio::{fs::File, io::AsyncRead};
 
 use super::PACKAGE_NAME;
 const ENGINE: &str = "tokio";
 const TEMP: &str = "/tmp";
+
+pub fn get_out_file(file_name: &str) -> PathBuf {
+    Path::new(TEMP)
+        .join(PACKAGE_NAME)
+        .join(ENGINE)
+        .join(file_name)
+}
 
 pub async fn create_new_clean_file(file_name: &str) -> File {
     let out_dir = Path::new(TEMP).join(PACKAGE_NAME).join(ENGINE);

@@ -312,24 +312,6 @@ impl<R: Read + Seek> Debug for ArchiveReader<R> {
 
 impl<R: Read + Seek> Display for ArchiveReader<R> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        /*         Archive:  test_multiple.zip
-        There is no zipfile comment.
-
-        End-of-central-directory record:
-        -------------------------------
-
-          Zip archive file size:                      3156 (0000000000000C54h)
-          Actual end-cent-dir record offset:          3134 (0000000000000C3Eh)
-          Expected end-cent-dir record offset:        3134 (0000000000000C3Eh)
-          (based on the length of the central directory and its expected offset)
-
-          This zipfile constitutes the sole disk of a single-part archive; its
-          central directory contains 3 entries.
-          The central directory is 185 (00000000000000B9h) bytes long,
-          and its (expected) offset in bytes from the beginning of the zipfile
-          is 2949 (0000000000000B85h).
-         */
-
         writeln!(f, "Archive:  xxxxxxxxxx.zip")?;
 
         if let Some(archive_comment) = &self.central_directory_end.archive_comment {

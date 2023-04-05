@@ -15,7 +15,7 @@ use crate::{
 ///  (ASCII or an ASCII-compatible extension such as ISO-8859, UTF-8, etc.)
 /// Author: Cosmin Truta.
 ///
-/// See "proginfo/txtvsbin.txt" for more information.
+/// See [txtvsbin.txt](https://github.com/LuaDist/zip/blob/master/proginfo/txtvsbin.txt) for more information.
 pub fn is_text_buf(buffer: &[u8]) -> bool {
     let mut result = false;
     for c in buffer {
@@ -156,11 +156,14 @@ pub fn build_file_header(
 
     let mut extra_fields: Vec<Box<dyn ExtraFields>> = Vec::new();
 
-    if options.last_modified_time.extended_timestamp() {
+    if options.last_modified_time.extended_timestamp()
+        || options.last_creation_time.is_some()
+        || options.last_access_time.is_some()
+    {
         let ts = ExtraFieldExtendedTimestamp::new(
             Some(options.last_modified_time.timestamp()),
-            None,
-            None,
+            options.last_access_time,
+            options.last_creation_time,
         );
         extra_fields.push(Box::new(ts));
     }
@@ -172,6 +175,14 @@ pub fn build_file_header(
         extra_fields.push(Box::new(ts));
         zip64_extra_field_added = true;
     }
+
+    let unix_permissions = if let Some(permissions) = options.permissions {
+        permissions & 0o100000
+    } else {
+        0o100644
+    };
+
+    let external_file_attributes: u32 = unix_permissions << 16;
 
     let mut archive_file_entry = ArchiveFileEntry {
         version_made_by,
@@ -189,7 +200,7 @@ pub fn build_file_header(
         offset,
         compressor,
         internal_file_attributes: 0,
-        external_file_attributes: 0,
+        external_file_attributes,
         file_disk_number: 0,
         extra_fields,
         file_comment,
@@ -254,7 +265,7 @@ pub fn build_central_directory_file_header(
     central_directory_header.write_u16(file_info.file_comment_length()); // File comment length.
     central_directory_header.write_u16(file_info.file_disk_number as u16); // File's Disk number.
     central_directory_header.write_u16(file_info.internal_file_attributes); // Internal file attributes.
-    central_directory_header.write_u32((0o100644 << 16) as u32); // External file attributes (regular file / rw-r--r--).
+    central_directory_header.write_u32(file_info.external_file_attributes); // External file attributes (regular file / rw-r--r--).
     central_directory_header.write_u32(file_info.zip64_offset()); // Offset from start of file to local file header.
     central_directory_header.write_bytes(&file_info.file_name_as_bytes); // Filename.
 

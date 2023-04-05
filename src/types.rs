@@ -246,7 +246,24 @@ impl fmt::Display for ArchiveFileEntry {
         } else {
             "binary"
         };
+
         writeln!(f, "{: <padding$}{:}", "apparent file type:", file_type)?;
+
+        let unix_file_attributes = (self.external_file_attributes >> 16) & 0xFFFF;
+        let label = format!("Unix file attributes ({:o} octal):", unix_file_attributes);
+        writeln!(
+            f,
+            "{: <padding$}{:}",
+            label,
+            readable_file_attributes(unix_file_attributes as u16)
+        )?;
+
+        let dos_file_attributes = self.external_file_attributes & 0xFF;
+        writeln!(
+            f,
+            "{: <padding$}{:}",
+            "MS-DOS file attributes (00 hex): ", dos_file_attributes
+        )?;
 
         if !self.extra_fields.is_empty() {
             writeln!(
@@ -272,6 +289,47 @@ impl fmt::Display for ArchiveFileEntry {
 
         Ok(())
     }
+}
+
+fn readable_file_attributes(file_attributes: u16) -> String {
+    let mut s: String = String::from("----------");
+
+    if file_attributes & 1 != 0 {
+        s.replace_range(9..10, "x");
+    }
+
+    if file_attributes & 2 != 0 {
+        s.replace_range(8..9, "w");
+    }
+
+    if file_attributes & 4 != 0 {
+        s.replace_range(7..8, "r");
+    }
+
+    if file_attributes & (1 << 3) != 0 {
+        s.replace_range(6..7, "x");
+    }
+
+    if file_attributes & (2 << 3) != 0 {
+        s.replace_range(5..6, "w");
+    }
+
+    if file_attributes & (4 << 3) != 0 {
+        s.replace_range(4..5, "r");
+    }
+
+    if file_attributes & (1 << 6) != 0 {
+        s.replace_range(3..4, "x");
+    }
+
+    if file_attributes & (2 << 6) != 0 {
+        s.replace_range(2..3, "w");
+    }
+
+    if file_attributes & (4 << 6) != 0 {
+        s.replace_range(1..2, "r");
+    }
+    s
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
@@ -589,5 +647,14 @@ mod test {
             FileCompatibilitySystem::from_u8(55),
             FileCompatibilitySystem::Unknown(55)
         );
+    }
+
+    #[test]
+    fn test_permision() {
+        let val = 0o755;
+        println!("{:o} {}", val, readable_file_attributes(val));
+
+        let val = 0o644;
+        println!("{:o} {}", val, readable_file_attributes(val));
     }
 }

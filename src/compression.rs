@@ -98,6 +98,7 @@ impl Display for CompressionMethod {
     }
 }
 
+/// Compression method's level
 #[derive(Clone, Copy, PartialEq)]
 pub enum Level {
     /// Fastest quality of compression, usually produces bigger size.
@@ -109,7 +110,7 @@ pub enum Level {
     /// Default quality of compression defined by the selected compression algorithm.
     Default,
 
-    /// No compression at all
+    /// No compression at all, the archiver will set the compression method as _store_
     None,
 
     /// Precise quality based on the underlying compression algorithms’ qualities.
