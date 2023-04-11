@@ -36,7 +36,7 @@ async fn archive_multiple() -> Result<(), ArchiveError> {
 
     let path = Path::new("tests/resources/rust-mascot.png");
     let mut in_file = File::open(path).await?;
-    archive.append("marcot.png", &options, &mut in_file).await?;
+    archive.append("mascot.png", &options, &mut in_file).await?;
 
     archive.set_archive_comment("This is a comment for the archive, This is a comment for the archive, This is a comment for the archive, This is a comment for the archive");
     let (archive_size, out_file) = archive.finalize().await?;
@@ -77,9 +77,11 @@ async fn archive_multiple() -> Result<(), ArchiveError> {
     assert_eq!("file1.txt", entry1.get_file_name());
     assert_eq!("file2.txt", entry2.get_file_name());
     assert_eq!("file3.txt", entry3.get_file_name());
-    assert_eq!("marcot.png", entry4.get_file_name());
+    assert_eq!("mascot.png", entry4.get_file_name());
     //test time
 
+    assert!(entry3.is_apparently_text_file());
+    assert!(!entry4.is_apparently_text_file());
     //test compression meth
 
     Ok(())

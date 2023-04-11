@@ -53,10 +53,19 @@ impl ArchiveFileEntry {
         self.general_purpose_flags & (1u16 << 0) != 0
     }
 
+    fn version_made_by_pretty(&self) -> (u8, u8) {
+        ArchiveFileEntry::pretty_version(self.version_made_by)
+    }
+
+    fn minimum_version_needed_to_extract_pretty(&self) -> (u8, u8) {
+        ArchiveFileEntry::pretty_version(self.minimum_version_needed_to_extract)
+    }
+
     ///Retreive the version in a pretty format
-    fn pretty_version(zip_version: u16) -> (u16, u16) {
-        let major = zip_version / 10;
-        let minor = zip_version % 10;
+    fn pretty_version(zip_version: u16) -> (u8, u8) {
+        let version_part = zip_version.to_le_bytes()[0];
+        let major = version_part / 10;
+        let minor = version_part % 10;
 
         (major, minor)
     }
@@ -133,15 +142,14 @@ impl fmt::Display for ArchiveFileEntry {
             self.system_origin()
         )?;
 
-        let (major, minor) = ArchiveFileEntry::pretty_version(self.version_made_by);
+        let (major, minor) = self.version_made_by_pretty();
         writeln!(
             f,
             "{: <padding$}{}.{}",
             "version of encoding software:", major, minor
         )?;
 
-        let (major, minor) =
-            ArchiveFileEntry::pretty_version(self.minimum_version_needed_to_extract);
+        let (major, minor) = self.minimum_version_needed_to_extract_pretty();
         writeln!(
             f,
             "{: <padding$}{}.{}",

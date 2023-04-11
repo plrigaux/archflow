@@ -264,8 +264,8 @@ impl CentralDirectoryEnd {
     // required data. In this case the file SHOULD contain a ZIP64 format record
     // and the field of this record will be set to -1
     pub fn needs_zip64_format_extensions(&self) -> bool {
-        self.number_of_this_disk == 0xFFFF
-            || self.number_of_the_disk_with_central_directory == 0xFFFF
+        self.number_of_this_disk >= u16::MAX as u32
+            || self.number_of_the_disk_with_central_directory >= u16::MAX as u32
             || self.total_number_of_entries_on_this_disk >= u16::MAX as u64
             || self.total_number_of_entries_in_the_central_directory >= u16::MAX as u64
             || self.central_directory_size >= u32::MAX as u64
@@ -541,7 +541,12 @@ impl ExtraFields for ExtraFieldExtendedTimestamp {
 /// only appear if the corresponding Local or Central
 /// directory record field is set to 0xFFFF or 0xFFFFFFFF.
 ///
-/// If one entry does not fit into the classic LOC or CEN record, only that entry is required to be moved into a ZIP64 extra field. The other entries may stay in the classic record. Therefore, not all entries shown in the following table might be stored in a ZIP64 extra field. However, if they appear, their order must be as shown in the table.
+/// If one entry does not fit into the classic LOC or CEN record,
+/// only that entry is required to be moved into a ZIP64 extra
+/// field. The other entries may stay in the classic record.
+/// Therefore, not all entries shown in the following table
+/// might be stored in a ZIP64 extra field. However,
+/// if they appear, their order must be as shown in the table.
 ///
 /// Note: all fields stored in Intel low-byte/high-byte order.
 #[derive(Debug)]
@@ -685,6 +690,10 @@ impl ExtraFields for ExtraFieldUnknown {
         archive_descriptor.write_bytes(&self.data);
     }
 }
+
+#[cfg(test)]
+#[path = "./tests/external_fields.rs"]
+mod external_fields_tests;
 
 #[cfg(test)]
 mod test {
