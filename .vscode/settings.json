@@ -1,6 +1,4 @@
 {
     "terminal.integrated.scrollback": 5000,
-    "rust-analyzer.linkedProjects": [
-        "/Cargo.toml"
-    ]
+
 }

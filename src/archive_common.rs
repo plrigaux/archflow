@@ -521,6 +521,10 @@ impl ExtraFields for ExtraFieldExtendedTimestamp {
         archive_descriptor: &mut ArchiveDescriptor,
         _archive_file_entry: &ArchiveFileEntry,
     ) {
+        if self.flags == 0 {
+            return;
+        }
+
         archive_descriptor.write_u16(ExtraFieldExtendedTimestamp::HEADER_ID);
         archive_descriptor.write_u16(self.file_header_extra_field_data_size());
         archive_descriptor.write_u8(self.flags); //     The bit set inside the flags by when the last modification time is present in this extra field.

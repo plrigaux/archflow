@@ -107,6 +107,7 @@ impl<'a, W: Write + 'a> ZipArchive<'a, W> {
             compressor,
             file_header_offset,
             &self.data,
+            false,
         );
 
         self.sink.write_all(file_header.buffer())?;

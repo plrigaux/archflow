@@ -34,9 +34,14 @@ async fn archive_multiple() -> Result<(), ArchiveError> {
         .append("file3.txt", &options, &mut b"Some string data".as_ref())
         .await?;
 
+    //let path = Path::new("tests/resources");
+    //let mut in_file = File::open(path).await?;
+
     let path = Path::new("tests/resources/rust-mascot.png");
     let mut in_file = File::open(path).await?;
     archive.append("mascot.png", &options, &mut in_file).await?;
+
+    archive.append_directory("test_dir", &options).await?;
 
     archive.set_archive_comment("This is a comment for the archive, This is a comment for the archive, This is a comment for the archive, This is a comment for the archive");
     let (archive_size, out_file) = archive.finalize().await?;
@@ -58,7 +63,7 @@ async fn archive_multiple() -> Result<(), ArchiveError> {
         archive_read
             .central_directory_end
             .total_number_of_entries_in_the_central_directory,
-        4
+        5
     );
 
     assert_eq!(

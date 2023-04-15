@@ -5,8 +5,10 @@ use crate::{
     },
     compression::CompressionMethod,
     constants::{
-        CENTRAL_DIRECTORY_ENTRY_SIGNATURE, DATA_DESCRIPTOR_SIGNATURE, EXTENDED_LOCAL_HEADER_FLAG,
-        FILE_HEADER_BASE_SIZE, LOCAL_FILE_HEADER_SIGNATURE, VERSION_MADE_BY, ZIP64_DESCRIPTOR_SIZE,
+        CENTRAL_DIRECTORY_ENTRY_SIGNATURE, DATA_DESCRIPTOR_SIGNATURE, DIR_DEFAULT,
+        EXTENDED_LOCAL_HEADER_FLAG, FILE_DEFAULT, FILE_HEADER_BASE_SIZE,
+        LOCAL_FILE_HEADER_SIGNATURE, MS_DIR, S_IFDIR, S_IFREG, VERSION_MADE_BY,
+        ZIP64_DESCRIPTOR_SIZE,
     },
     types::ArchiveFileEntry,
 };
@@ -127,6 +129,7 @@ pub fn build_file_header(
     compressor: CompressionMethod,
     offset: u64,
     data: &SubZipArchiveData,
+    is_dir: bool,
 ) -> (ArchiveDescriptor, ArchiveFileEntry, u64) {
     let file_nameas_bytes = file_name.as_bytes();
     let file_name_as_bytes_own = file_nameas_bytes.to_owned();
@@ -151,7 +154,7 @@ pub fn build_file_header(
     general_purpose_flags = compressor
         .update_general_purpose_bit_flag(general_purpose_flags, options.compression_level);
 
-    let minimum_version_needed_to_extract = compressor.zip_version_needed();
+    let mut minimum_version_needed_to_extract = compressor.zip_version_needed();
     let version_made_by = options.system.update_version_needed(VERSION_MADE_BY);
 
     let mut extra_fields: Vec<Box<dyn ExtraFields>> = Vec::new();
@@ -176,13 +179,21 @@ pub fn build_file_header(
         zip64_extra_field_added = true;
     }
 
-    let unix_permissions = if let Some(permissions) = options.permissions {
-        permissions & 0o100000
+    let (unix_ftype, default_permission, ms_dos_attr) = if is_dir {
+        general_purpose_flags &= !EXTENDED_LOCAL_HEADER_FLAG;
+        minimum_version_needed_to_extract = 20;
+        (S_IFDIR, DIR_DEFAULT, MS_DIR)
     } else {
-        0o100644
+        (S_IFREG, FILE_DEFAULT, 0)
     };
 
-    let external_file_attributes: u32 = unix_permissions << 16;
+    let unix_permissions = if let Some(permissions) = options.permissions {
+        permissions | unix_ftype
+    } else {
+        unix_ftype | default_permission
+    };
+
+    let external_file_attributes: u32 = (unix_permissions << 16) + ms_dos_attr;
 
     let mut archive_file_entry = ArchiveFileEntry {
         version_made_by,

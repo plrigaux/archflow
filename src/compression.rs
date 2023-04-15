@@ -98,6 +98,12 @@ impl Display for CompressionMethod {
     }
 }
 
+impl Default for CompressionMethod {
+    fn default() -> Self {
+        CompressionMethod::Deflate()
+    }
+}
+
 /// Compression method's level
 #[derive(Clone, Copy, PartialEq)]
 pub enum Level {

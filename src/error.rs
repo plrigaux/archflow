@@ -15,7 +15,7 @@ impl Display for ArchiveError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             ArchiveError::IoError(e) => {
-                write!(f, "Archive io error: {}", e)
+                write!(f, "Archive io error: {:?}", e)
             }
             ArchiveError::UnsuportedCompressionLevel(method) => {
                 write!(f, "Archive level error for method {:}", method)

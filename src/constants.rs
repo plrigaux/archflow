@@ -21,3 +21,9 @@ pub const VERSION_MADE_BY: u16 = (UNIX as u16) << 8 | DEFAULT_VERSION as u16;
 pub const EXTENDED_LOCAL_HEADER_FLAG: u16 = 1 << 3;
 pub const VERSION_USES_ZIP64_FORMAT_EXTENSIONS: u16 = 45;
 pub const X5455_EXTENDEDTIMESTAMP: u16 = 0x5455;
+
+pub const S_IFREG: u32 = 0o100000;
+pub const S_IFDIR: u32 = 0o040000;
+pub const FILE_DEFAULT: u32 = 0o644;
+pub const DIR_DEFAULT: u32 = 0o755;
+pub const MS_DIR: u32 = 0x00000010;

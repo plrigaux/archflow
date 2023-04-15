@@ -3,15 +3,16 @@ use core::fmt;
 use std::{u16, u8};
 
 use crate::{
-    archive_common::ExtraFields, compression::CompressionMethod,
-    constants::VERSION_USES_ZIP64_FORMAT_EXTENSIONS,
+    archive_common::ExtraFields,
+    compression::CompressionMethod,
+    constants::{MS_DIR, S_IFDIR, VERSION_USES_ZIP64_FORMAT_EXTENSIONS},
 };
 use chrono::{DateTime, Datelike, Local, NaiveDate, TimeZone, Timelike, Utc};
 
 /// The archive file complete information.
 ///
 /// Most of this information is located in the archive central registry and it's partly duplicated in thier respective file header.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct ArchiveFileEntry {
     pub version_made_by: u16,
     pub minimum_version_needed_to_extract: u16,
@@ -112,6 +113,10 @@ impl ArchiveFileEntry {
         } else {
             self.internal_file_attributes &= !ArchiveFileEntry::TEXT_INDICATOR
         }
+    }
+
+    pub fn is_dir(&mut self) {
+        self.internal_file_attributes &= !ArchiveFileEntry::TEXT_INDICATOR
     }
 
     pub fn is_apparently_text_file(&self) -> bool {
@@ -258,19 +263,21 @@ impl fmt::Display for ArchiveFileEntry {
         writeln!(f, "{: <padding$}{:}", "apparent file type:", file_type)?;
 
         let unix_file_attributes = (self.external_file_attributes >> 16) & 0xFFFF;
-        let label = format!("Unix file attributes ({:o} octal):", unix_file_attributes);
+        let label = format!("Unix file attributes ({:06o} octal):", unix_file_attributes);
         writeln!(
             f,
             "{: <padding$}{:}",
             label,
-            readable_file_attributes(unix_file_attributes as u16)
+            readable_file_unix_attributes(unix_file_attributes)
         )?;
 
         let dos_file_attributes = self.external_file_attributes & 0xFF;
+        let label = format!("MS-DOS file attributes ({:0X} hex): ", dos_file_attributes);
         writeln!(
             f,
             "{: <padding$}{:}",
-            "MS-DOS file attributes (00 hex): ", dos_file_attributes
+            label,
+            readable_file_dos_attributes(dos_file_attributes)
         )?;
 
         if !self.extra_fields.is_empty() {
@@ -299,7 +306,7 @@ impl fmt::Display for ArchiveFileEntry {
     }
 }
 
-fn readable_file_attributes(file_attributes: u16) -> String {
+fn readable_file_unix_attributes(file_attributes: u32) -> String {
     let mut s: String = String::from("----------");
 
     if file_attributes & 1 != 0 {
@@ -337,9 +344,24 @@ fn readable_file_attributes(file_attributes: u16) -> String {
     if file_attributes & (4 << 6) != 0 {
         s.replace_range(1..2, "r");
     }
+
+    if file_attributes & S_IFDIR != 0 {
+        s.replace_range(0..1, "d");
+    }
     s
 }
 
+fn readable_file_dos_attributes(file_attributes: u32) -> &'static str {
+    if file_attributes == 0 {
+        return "none";
+    }
+
+    if file_attributes & MS_DIR != 0 {
+        return "dir";
+    }
+
+    ""
+}
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub struct DateTimeCS {
     year: u16,
@@ -660,9 +682,9 @@ mod test {
     #[test]
     fn test_permision() {
         let val = 0o755;
-        println!("{:o} {}", val, readable_file_attributes(val));
+        println!("{:o} {}", val, readable_file_unix_attributes(val));
 
         let val = 0o644;
-        println!("{:o} {}", val, readable_file_attributes(val));
+        println!("{:o} {}", val, readable_file_unix_attributes(val));
     }
 }

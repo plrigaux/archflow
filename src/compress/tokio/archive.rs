@@ -7,7 +7,7 @@ use crate::compress::common::{
     build_file_header, build_file_sizes_update, is_streaming, SubZipArchiveData,
 };
 use crate::compress::FileOptions;
-use crate::compression::Level;
+use crate::compression::{CompressionMethod, Level};
 use crate::constants::{EXTENDED_LOCAL_HEADER_FLAG, FILE_HEADER_BASE_SIZE, FILE_HEADER_CRC_OFFSET};
 use crate::error::ArchiveError;
 use crc32fast::Hasher;
@@ -97,6 +97,7 @@ impl<'a, W: AsyncWrite + Unpin + Send + 'a> ZipArchive<'a, W> {
             compressor,
             file_header_offset,
             &self.data,
+            false,
         );
 
         self.sink.write_all(file_header.buffer()).await?;
@@ -168,6 +169,53 @@ impl<'a, W: AsyncWrite + Unpin + Send + 'a> ZipArchive<'a, W> {
                 .extra_fields
                 .push(Box::new(zip_extra_field));
         }
+
+        self.data.add_archive_file_entry(archive_file_entry);
+
+        self.data.archive_size = self.sink.get_written_bytes_count()?;
+
+        Ok(())
+    }
+
+    pub async fn append_directory(
+        &mut self,
+        file_name: &str,
+        options: &FileOptions<'a>,
+    ) -> Result<(), ArchiveError>
+    where
+        W: AsyncWrite + Unpin,
+    {
+        let file_header_offset = self.data.archive_size;
+        let compressor = CompressionMethod::Store();
+
+        let last_ch = file_name.chars().last().unwrap();
+
+        let mut new_file_name = String::from(file_name);
+
+        if last_ch != '/' {
+            new_file_name.push('/');
+        }
+
+        let (file_header, mut archive_file_entry, _zip_extra_offset) = build_file_header(
+            &new_file_name,
+            options,
+            compressor,
+            file_header_offset,
+            &self.data,
+            true,
+        );
+        archive_file_entry.general_purpose_flags &= !EXTENDED_LOCAL_HEADER_FLAG;
+
+        self.sink.write_all(file_header.buffer()).await?;
+
+        let (uncompressed_size, is_text) = (0, false);
+
+        let compressed_size = 0;
+
+        archive_file_entry.crc32 = 0;
+        archive_file_entry.compressed_size = compressed_size;
+        archive_file_entry.uncompressed_size = uncompressed_size;
+        archive_file_entry.apparently_text_file(is_text);
 
         self.data.add_archive_file_entry(archive_file_entry);
 
