@@ -177,6 +177,9 @@ impl<'a, W: AsyncWrite + Unpin + Send + 'a> ZipArchive<'a, W> {
         Ok(())
     }
 
+    /// Append a directory entry to the archive.
+    ///
+    ///
     pub async fn append_directory(
         &mut self,
         file_name: &str,
@@ -188,13 +191,15 @@ impl<'a, W: AsyncWrite + Unpin + Send + 'a> ZipArchive<'a, W> {
         let file_header_offset = self.data.archive_size;
         let compressor = CompressionMethod::Store();
 
-        let last_ch = file_name.chars().last().unwrap();
-
-        let mut new_file_name = String::from(file_name);
-
-        if last_ch != '/' {
-            new_file_name.push('/');
-        }
+        //ensure that the name end with a slash ('/')
+        let new_file_name = match file_name.chars().last() {
+            Some('/') | Some('\\') => file_name.to_owned(),
+            _ => {
+                let mut s = file_name.to_owned();
+                s.push('/');
+                s
+            }
+        };
 
         let (file_header, mut archive_file_entry, _zip_extra_offset) = build_file_header(
             &new_file_name,

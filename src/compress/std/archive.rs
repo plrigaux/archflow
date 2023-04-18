@@ -7,7 +7,7 @@ use crate::compress::common::{
     build_file_header, build_file_sizes_update, is_streaming, SubZipArchiveData, ZipArchiveCommon,
 };
 use crate::compress::FileOptions;
-use crate::compression::Level;
+use crate::compression::{CompressionMethod, Level};
 use crate::constants::{EXTENDED_LOCAL_HEADER_FLAG, FILE_HEADER_BASE_SIZE, FILE_HEADER_CRC_OFFSET};
 use crate::error::ArchiveError;
 use crc32fast::Hasher;
@@ -175,6 +175,58 @@ impl<'a, W: Write + 'a> ZipArchive<'a, W> {
                 .extra_fields
                 .push(Box::new(zip_extra_field));
         }
+
+        self.data.add_archive_file_entry(archive_file_entry);
+
+        self.data.archive_size = self.sink.get_written_bytes_count()?;
+
+        Ok(())
+    }
+
+    /// Append a directory entry to the archive.
+    ///
+    ///
+    pub fn append_directory(
+        &mut self,
+        file_name: &str,
+        options: &FileOptions<'a>,
+    ) -> Result<(), ArchiveError>
+    where
+        W: Write,
+    {
+        let file_header_offset = self.data.archive_size;
+        let compressor = CompressionMethod::Store();
+
+        //ensure that the name end with a slash ('/')
+        let new_file_name = match file_name.chars().last() {
+            Some('/') | Some('\\') => file_name.to_owned(),
+            _ => {
+                let mut s = file_name.to_owned();
+                s.push('/');
+                s
+            }
+        };
+
+        let (file_header, mut archive_file_entry, _zip_extra_offset) = build_file_header(
+            &new_file_name,
+            options,
+            compressor,
+            file_header_offset,
+            &self.data,
+            true,
+        );
+        archive_file_entry.general_purpose_flags &= !EXTENDED_LOCAL_HEADER_FLAG;
+
+        self.sink.write_all(file_header.buffer())?;
+
+        let (uncompressed_size, is_text) = (0, false);
+
+        let compressed_size = 0;
+
+        archive_file_entry.crc32 = 0;
+        archive_file_entry.compressed_size = compressed_size;
+        archive_file_entry.uncompressed_size = uncompressed_size;
+        archive_file_entry.apparently_text_file(is_text);
 
         self.data.add_archive_file_entry(archive_file_entry);
 
