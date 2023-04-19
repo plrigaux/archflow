@@ -187,7 +187,7 @@ pub fn build_file_header(
         (S_IFREG, FILE_DEFAULT, 0)
     };
 
-    let unix_permissions = if let Some(permissions) = options.permissions {
+    let unix_permissions = if let Some(permissions) = options.unix_permissions {
         permissions | unix_ftype
     } else {
         unix_ftype | default_permission

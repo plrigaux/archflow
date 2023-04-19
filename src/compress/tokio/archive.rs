@@ -209,18 +209,11 @@ impl<'a, W: AsyncWrite + Unpin + Send + 'a> ZipArchive<'a, W> {
             &self.data,
             true,
         );
+
+        //Since no payload, there is no need for data descriptor
         archive_file_entry.general_purpose_flags &= !EXTENDED_LOCAL_HEADER_FLAG;
 
         self.sink.write_all(file_header.buffer()).await?;
-
-        let (uncompressed_size, is_text) = (0, false);
-
-        let compressed_size = 0;
-
-        archive_file_entry.crc32 = 0;
-        archive_file_entry.compressed_size = compressed_size;
-        archive_file_entry.uncompressed_size = uncompressed_size;
-        archive_file_entry.apparently_text_file(is_text);
 
         self.data.add_archive_file_entry(archive_file_entry);
 

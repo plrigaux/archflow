@@ -74,7 +74,7 @@ pub struct FileOptions<'a> {
     pub last_access_time: Option<i32>,
 
     /// Unix permissions.
-    pub permissions: Option<u32>,
+    pub unix_permissions: Option<u32>,
 
     /// The system of origin.
     pub system: FileCompatibilitySystem,
@@ -123,7 +123,7 @@ impl<'a> FileOptions<'a> {
     /// higher file mode bits. So it cannot be used to denote an entry as a directory,
     /// symlink, or other special file type.
     pub fn unix_permissions(mut self, mode: u32) -> FileOptions<'a> {
-        self.permissions = Some(mode & 0o777);
+        self.unix_permissions = Some(mode & 0o777);
         self
     }
 
@@ -186,7 +186,7 @@ impl<'a> Default for FileOptions<'a> {
             compression_method: CompressionMethod::Deflate(),
             compression_level: Level::Default,
             last_modified_time: FileDateTime::Now,
-            permissions: None,
+            unix_permissions: None,
             system: FileCompatibilitySystem::Unix,
             comment: None,
             large_file: false,
