@@ -366,6 +366,8 @@ pub trait ExtraFields: Debug + Send + Sync {
     );
 
     fn as_any(&self) -> &dyn Any;
+
+    fn display_central(&self) -> String;
 }
 
 //The central-directory extra field contains:
@@ -594,6 +596,41 @@ impl ExtraFields for ExtraFieldExtendedTimestamp {
     fn as_any(&self) -> &dyn Any {
         self
     }
+
+    fn display_central(&self) -> String {
+        let mut plural = "";
+
+        let mut times = String::new();
+
+        if self.flags & ExtraFieldExtendedTimestamp::MODIFY_TIME_BIT != 0 {
+            times.push_str("modification")
+        }
+
+        if self.flags & ExtraFieldExtendedTimestamp::ACCESS_TIME_BIT != 0 {
+            if !times.is_empty() {
+                times.push('/');
+                plural = "s";
+            }
+            times.push_str("access")
+        }
+
+        if self.flags & ExtraFieldExtendedTimestamp::CREATE_TIME_BIT != 0 {
+            if !times.is_empty() {
+                times.push('/');
+                plural = "s";
+            }
+            times.push_str("creation")
+        }
+
+        format!(
+            "- A subfield with ID 0x{:04X} (universal time) and {} data bytes.
+  The local extra field has UTC/GMT {} time{}.",
+            ExtraFieldExtendedTimestamp::HEADER_ID,
+            self.central_header_extra_field_data_size(),
+            times,
+            plural
+        )
+    }
 }
 
 /// The following is the layout of the ZIP64 extended
@@ -712,6 +749,14 @@ impl ExtraFields for ExtraFieldZIP64ExtendedInformation {
     fn as_any(&self) -> &dyn Any {
         self
     }
+
+    fn display_central(&self) -> String {
+        format!(
+            "- A subfield with ID 0x{:04X} (Zip64) and {} data bytes.",
+            ExtraFieldZIP64ExtendedInformation::HEADER_ID,
+            ExtraFieldZIP64ExtendedInformation::ZIP64_EXTRA_FIELD_SIZE, //WRONG BUT PLACEHOLDER
+        )
+    }
 }
 
 #[derive(Debug)]
@@ -761,6 +806,14 @@ impl ExtraFields for ExtraFieldUnknown {
 
     fn as_any(&self) -> &dyn Any {
         self
+    }
+
+    fn display_central(&self) -> String {
+        format!(
+            "- A subfield with ID 0x{:04X} (Zip64) and {} data bytes.",
+            self.header_id,
+            -1, //WRONG BUT PLACEHOLDER
+        )
     }
 }
 

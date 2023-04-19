@@ -102,7 +102,10 @@ async fn archive_multiple_norm() -> Result<(), ArchiveError> {
     let out_file = create_new_clean_file(out_file_name).await;
     let mut archive = ZipArchive::new(out_file);
 
-    let options = FileOptions::default().compression_method(CompressionMethod::Xz());
+    let options = FileOptions::default()
+        .compression_method(CompressionMethod::Xz())
+        .set_file_comment("file1.txt complessed with xz")
+        .time_stamp(None, None, Some(1618854985));
     archive.append("file1.txt", &options, &mut in_file).await?;
 
     let mut in_file = File::open(path).await?;

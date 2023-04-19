@@ -318,6 +318,11 @@ impl fmt::Display for ArchiveFileEntry {
                 "{: <padding$}",
                 "\nThe central-directory extra field contains:",
             )?;
+
+            for extra_fields_box in self.extra_fields.iter() {
+                let extra_fields = extra_fields_box.as_ref();
+                writeln!(f, "{}", extra_fields.display_central(),)?;
+            }
         }
 
         if let Some(comment) = &self.file_comment {
@@ -537,6 +542,8 @@ pub enum FileDateTime {
 
     /// Custom time in Unix format (seconds since UNIX epoch)
     UnixCustom(i32),
+
+    None,
 }
 
 impl FileDateTime {
@@ -544,8 +551,7 @@ impl FileDateTime {
         match self {
             FileDateTime::Zero => DateTimeCS::default(),
             FileDateTime::Custom(date_time) => *date_time,
-            FileDateTime::Now => DateTimeCS::now(),
-            FileDateTime::UnixNow => DateTimeCS::now(),
+            FileDateTime::Now | FileDateTime::UnixNow | FileDateTime::None => DateTimeCS::now(),
             FileDateTime::UnixCustom(timestamp) => DateTimeCS::from_timestamp(*timestamp),
         }
     }
@@ -558,13 +564,16 @@ impl FileDateTime {
         self.tuple().to_time()
     }
 
-    pub fn timestamp(&self) -> i32 {
+    pub fn timestamp(&self) -> Option<i32> {
         match self {
-            FileDateTime::Zero => DateTimeCS::default().to_timestamp(),
-            FileDateTime::Custom(date_time) => date_time.to_timestamp(),
-            FileDateTime::Now => DateTimeCS::convert_timestamp(chrono::offset::Utc::now()),
-            FileDateTime::UnixNow => DateTimeCS::convert_timestamp(chrono::offset::Utc::now()),
-            FileDateTime::UnixCustom(timestamp) => *timestamp,
+            FileDateTime::Zero => Some(DateTimeCS::default().to_timestamp()),
+            FileDateTime::Custom(date_time) => Some(date_time.to_timestamp()),
+            FileDateTime::Now => Some(DateTimeCS::convert_timestamp(chrono::offset::Utc::now())),
+            FileDateTime::UnixNow => {
+                Some(DateTimeCS::convert_timestamp(chrono::offset::Utc::now()))
+            }
+            FileDateTime::UnixCustom(timestamp) => Some(*timestamp),
+            FileDateTime::None => None,
         }
     }
 

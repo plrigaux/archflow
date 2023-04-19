@@ -164,7 +164,7 @@ pub fn build_file_header(
         || options.last_access_time.is_some()
     {
         let ts = ExtraFieldExtendedTimestamp::new(
-            Some(options.last_modified_time.timestamp()),
+            options.last_modified_time.timestamp(),
             options.last_access_time,
             options.last_creation_time,
         );

@@ -171,7 +171,7 @@ impl<'a> FileOptions<'a> {
         self.last_modified_time = if let Some(last_modification_time) = last_modification_time {
             FileDateTime::UnixCustom(last_modification_time)
         } else {
-            FileDateTime::Zero
+            FileDateTime::None
         };
         self.last_access_time = last_access_time;
         self.last_creation_time = last_creation_time;
