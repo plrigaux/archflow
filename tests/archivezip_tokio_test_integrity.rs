@@ -111,7 +111,9 @@ async fn archive_multiple_norm() -> Result<(), ArchiveError> {
 
     let options = FileOptions::default()
         .compression_method(CompressionMethod::Store())
-        .set_file_comment("This is a store file");
+        .set_file_comment("This is a store file")
+        .time_stamp(Some(1681926985), Some(1681928985), Some(1618854985));
+
     archive
         .append("file4.txt", &options, &mut b"Some string data".as_ref())
         .await?;

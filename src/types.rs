@@ -3,7 +3,7 @@ use core::fmt;
 use std::{u16, u8};
 
 use crate::{
-    archive_common::ExtraFields,
+    archive_common::{ExtraFieldExtendedTimestamp, ExtraFields},
     compression::CompressionMethod,
     constants::{MS_DIR, S_IFDIR, VERSION_USES_ZIP64_FORMAT_EXTENSIONS},
 };
@@ -122,6 +122,18 @@ impl ArchiveFileEntry {
     pub fn is_apparently_text_file(&self) -> bool {
         self.internal_file_attributes & ArchiveFileEntry::TEXT_INDICATOR != 0
     }
+
+    pub fn get_extra_field_time_stamp(&self) -> Option<&ExtraFieldExtendedTimestamp> {
+        for extra_field_box in self.extra_fields.iter() {
+            if let Some(extra_field) = extra_field_box
+                .as_any()
+                .downcast_ref::<ExtraFieldExtendedTimestamp>()
+            {
+                return Some(extra_field);
+            };
+        }
+        None
+    }
 }
 
 impl fmt::Display for ArchiveFileEntry {
@@ -210,6 +222,26 @@ impl fmt::Display for ArchiveFileEntry {
             "{: <padding$}{}",
             "file last modified on (DOS date/time):", date_time
         )?;
+
+        if let Some(extra_field_timestamp) = self.get_extra_field_time_stamp() {
+            if let Some(time) = extra_field_timestamp.modified_time_local() {
+                writeln!(
+                    f,
+                    "{: <padding$}{}",
+                    "file last modified on (UT extra field modtime):", time
+                )?;
+            }
+
+            if let Some(time) = extra_field_timestamp.modified_time_utc() {
+                writeln!(
+                    f,
+                    "{: <padding$}{}",
+                    "file last modified on (UT extra field modtime):", time
+                )?;
+            }
+        }
+        /*         file last modified on (UT extra field modtime): 2023 Apr 19 09:40:34 local
+        file last modified on (UT extra field modtime): 2023 Apr 19 13:40:34 UTC */
 
         writeln!(
             f,

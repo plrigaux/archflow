@@ -1,7 +1,11 @@
+use std::any::Any;
 use std::fmt::Debug;
 use std::str;
 use std::u32;
 use std::u8;
+
+use chrono::NaiveDateTime;
+use chrono::{DateTime, Local, TimeZone, Utc};
 
 use super::compression::CompressionMethod;
 
@@ -130,6 +134,7 @@ impl ArchiveDescriptor {
     }
 }
 
+#[derive(Default)]
 pub struct ArchiveDescriptorReader {
     index: usize,
 }
@@ -153,6 +158,7 @@ macro_rules! read_type {
         value
     }};
 }
+
 impl ArchiveDescriptorReader {
     pub fn new() -> ArchiveDescriptorReader {
         ArchiveDescriptorReader { index: 0 }
@@ -352,11 +358,14 @@ pub trait ExtraFields: Debug + Send + Sync {
         archive_descriptor: &mut ArchiveDescriptor,
         archive_file_entry: &ArchiveFileEntry,
     );
+
     fn central_header_extra_write_data(
         &self,
         archive_descriptor: &mut ArchiveDescriptor,
         archive_file_entry: &ArchiveFileEntry,
     );
+
+    fn as_any(&self) -> &dyn Any;
 }
 
 //The central-directory extra field contains:
@@ -377,10 +386,10 @@ pub trait ExtraFields: Debug + Send + Sync {
 ///
 #[derive(Debug, Default)]
 pub struct ExtraFieldExtendedTimestamp {
-    create_time: Option<i32>,
-    access_time: Option<i32>,
-    modify_time: Option<i32>,
     flags: u8,
+    modify_time: Option<i32>,
+    access_time: Option<i32>,
+    create_time: Option<i32>,
 }
 
 impl ExtraFieldExtendedTimestamp {
@@ -452,15 +461,40 @@ impl ExtraFieldExtendedTimestamp {
         size
     }
 
+    pub fn modified_time_utc(&self) -> Option<String> {
+        match self.modify_time {
+            Some(time) => {
+                if let Some(datetime) = NaiveDateTime::from_timestamp_opt(time as i64, 0) {
+                    let dt = DateTime::<Utc>::from_utc(datetime, Utc);
+                    Some(dt.to_string())
+                } else {
+                    None
+                }
+            }
+            None => None,
+        }
+    }
+
+    pub fn modified_time_local(&self) -> Option<String> {
+        match self.modify_time {
+            Some(time) => match Local.timestamp_opt(time as i64, 0) {
+                chrono::LocalResult::None => None,
+                chrono::LocalResult::Single(dt) => Some(dt.to_string()),
+                chrono::LocalResult::Ambiguous(dt, _) => Some(dt.to_string()),
+            },
+            None => None,
+        }
+    }
+
     pub fn parse_extra_field(
         indexer: &mut ArchiveDescriptorReader,
         extra_field_as_bytes: &[u8],
         extra_field_data_size: u16,
     ) -> Self {
-        let mut create_time: Option<i32> = None;
-        let mut access_time: Option<i32> = None;
-        let mut modify_time: Option<i32> = None;
         let mut flags: u8 = 0;
+        let mut modify_time: Option<i32> = None;
+        let mut access_time: Option<i32> = None;
+        let mut create_time: Option<i32> = None;
 
         match extra_field_data_size {
             0 => {}
@@ -489,6 +523,25 @@ impl ExtraFieldExtendedTimestamp {
             flags,
         }
     }
+
+    fn central_header_extra_write_data_common(
+        &self,
+        archive_descriptor: &mut ArchiveDescriptor,
+
+        extra_field_data_size: u16,
+    ) {
+        if self.flags == 0 {
+            return;
+        }
+
+        archive_descriptor.write_u16(ExtraFieldExtendedTimestamp::HEADER_ID);
+        archive_descriptor.write_u16(extra_field_data_size);
+        archive_descriptor.write_u8(self.flags); //     The bit set inside the flags by when the last modification time is present in this extra field.
+
+        if let Some(modify_time) = self.modify_time {
+            archive_descriptor.write_i32(modify_time);
+        }
+    }
 }
 
 impl ExtraFields for ExtraFieldExtendedTimestamp {
@@ -503,9 +556,16 @@ impl ExtraFields for ExtraFieldExtendedTimestamp {
     fn file_header_write_data(
         &self,
         archive_descriptor: &mut ArchiveDescriptor,
-        archive_file_entry: &ArchiveFileEntry,
+        _archive_file_entry: &ArchiveFileEntry,
     ) {
-        self.central_header_extra_write_data(archive_descriptor, archive_file_entry);
+        if self.flags == 0 {
+            return;
+        }
+
+        self.central_header_extra_write_data_common(
+            archive_descriptor,
+            self.file_header_extra_field_data_size(),
+        );
 
         if let Some(access_time) = self.access_time {
             archive_descriptor.write_i32(access_time);
@@ -525,13 +585,14 @@ impl ExtraFields for ExtraFieldExtendedTimestamp {
             return;
         }
 
-        archive_descriptor.write_u16(ExtraFieldExtendedTimestamp::HEADER_ID);
-        archive_descriptor.write_u16(self.file_header_extra_field_data_size());
-        archive_descriptor.write_u8(self.flags); //     The bit set inside the flags by when the last modification time is present in this extra field.
+        self.central_header_extra_write_data_common(
+            archive_descriptor,
+            self.central_header_extra_field_data_size(),
+        );
+    }
 
-        if let Some(modify_time) = self.modify_time {
-            archive_descriptor.write_i32(modify_time);
-        }
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
 
@@ -647,6 +708,10 @@ impl ExtraFields for ExtraFieldZIP64ExtendedInformation {
             }
         }
     }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 #[derive(Debug)]
@@ -692,6 +757,10 @@ impl ExtraFields for ExtraFieldUnknown {
         archive_descriptor.write_u16(self.header_id);
         archive_descriptor.write_u16(self.central_header_extra_field_size());
         archive_descriptor.write_bytes(&self.data);
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
 
