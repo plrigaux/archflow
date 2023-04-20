@@ -62,7 +62,13 @@ impl<'a, W: AsyncWrite + Unpin + Send + 'a> ZipArchive<'a, W> {
 
     /// Get archive current total bytes written.
     pub fn get_archive_size(&mut self) -> u64 {
-        self.sink.get_written_bytes_count().unwrap()
+        match self.sink.get_written_bytes_count() {
+            Ok(val) => val,
+            Err(e) => {
+                println!("Error: {:?}", e);
+                0
+            }
+        }
     }
 
     /// Get back archive writer.

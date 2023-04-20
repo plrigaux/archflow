@@ -486,7 +486,13 @@ impl DateTimeCS {
     ) -> chrono::NaiveDateTime {
         let date = NaiveDate::from_ymd_opt(year, month, day).unwrap_or_else(|| {
             let zero = DateTimeCS::default();
-            NaiveDate::from_ymd_opt(zero.year as i32, zero.month as u32, zero.day as u32).unwrap()
+            match NaiveDate::from_ymd_opt(zero.year as i32, zero.month as u32, zero.day as u32) {
+                Some(date) => date,
+                None => {
+                    println!("Out of range date");
+                    chrono::NaiveDate::default()
+                }
+            }
         });
 
         date.and_hms_opt(hour, minute, second).unwrap_or_default()

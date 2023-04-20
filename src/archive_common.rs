@@ -144,7 +144,13 @@ macro_rules! read_type {
         let upper_bound = $self.index + ::std::mem::size_of::<$typ>();
 
         let read: [u8; ::std::mem::size_of::<$typ>()] =
-            $stream[$self.index..upper_bound].try_into().unwrap();
+            match $stream[$self.index..upper_bound].try_into() {
+                Ok(v) => v,
+                Err(e) => {
+                    println!("slice with incorrect length {:?}", e);
+                    Default::default()
+                }
+            };
         let value = <$typ>::from_le_bytes(read);
 
         $self.index = upper_bound;

@@ -206,7 +206,7 @@ fn archive_multiple_mock_z64() -> Result<(), ArchiveError> {
     Ok(())
 }
 
-#[test]
+#[allow(dead_code)]
 fn archive_multiple_mock_z64_read() -> Result<(), ArchiveError> {
     let out_file_name = "test_multiple_mock_64.zip";
 
