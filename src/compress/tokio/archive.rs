@@ -1,7 +1,7 @@
 use super::async_wrapper::{AsyncWriteSeekWrapper, AsyncWriteWrapper, CommonWrapper};
 use super::compressor::compress;
 
-use crate::archive_common::{ArchiveDescriptor, ExtraField, ExtraFieldZIP64ExtendedInformation};
+use crate::archive_common::{ArchiveDescriptor, ExtraField};
 use crate::compress::common::{
     build_central_directory_end, build_central_directory_file_header, build_data_descriptor,
     build_file_header, build_file_sizes_update, is_streaming, SubZipArchiveData,
@@ -12,7 +12,6 @@ use crate::constants::{EXTENDED_LOCAL_HEADER_FLAG, FILE_HEADER_BASE_SIZE, FILE_H
 use crate::error::ArchiveError;
 use crc32fast::Hasher;
 use std::io::SeekFrom;
-use std::sync::Arc;
 use tokio::io::{AsyncRead, AsyncSeek, AsyncSeekExt, AsyncWrite, AsyncWriteExt};
 
 /// A zip archive.
@@ -174,12 +173,7 @@ impl<'a, W: AsyncWrite + Unpin + Send + 'a> ZipArchive<'a, W> {
             }
         }
 
-        if !archive_file_entry.has_zip64_extra_field && archive_file_entry.is_zip64() {
-            let zip_extra_field = ExtraFieldZIP64ExtendedInformation::default();
-            archive_file_entry
-                .extra_fields
-                .push(Arc::new(zip_extra_field));
-        }
+        archive_file_entry.need_to_add_zip64_extra_field();
 
         self.data.add_archive_file_entry(archive_file_entry);
 

@@ -165,14 +165,12 @@ pub fn build_file_header(
 
     let mut extra_fields: Vec<Arc<dyn ExtraField>> = Vec::new();
 
-    let mut zip64_extra_field_added = false;
     let mut extrafield_zip64: Option<Arc<ExtraFieldZIP64ExtendedInformation>> = None;
     if options.large_file && !is_streaming(data.base_flags) {
         let ts = ExtraFieldZIP64ExtendedInformation::default();
         let b: Arc<ExtraFieldZIP64ExtendedInformation> = Arc::new(ts);
         extrafield_zip64 = Some(b.clone());
         extra_fields.push(b);
-        zip64_extra_field_added = true;
     }
 
     if options.last_modified_time.extended_timestamp()
@@ -223,7 +221,6 @@ pub fn build_file_header(
         file_disk_number: 0,
         extra_fields,
         file_comment,
-        has_zip64_extra_field: zip64_extra_field_added,
     };
 
     let mut extended_data_buffer = ArchiveDescriptor::new(500);

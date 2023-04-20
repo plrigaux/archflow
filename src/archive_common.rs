@@ -119,7 +119,6 @@ impl ArchiveDescriptor {
             compressor: CompressionMethod::from_compression_method(compression_method)?,
             file_comment: None,
             extra_fields: Vec::new(),
-            has_zip64_extra_field: false,
         };
 
         Ok(archive_file_entry)

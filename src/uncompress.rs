@@ -188,7 +188,6 @@ impl<R: Read + Seek> ArchiveReader<R> {
                 file_disk_number: file_disk_number as u32,
                 extra_fields: Vec::new(),
                 file_comment: None,
-                has_zip64_extra_field: false,
             };
 
             if extra_field_length != 0 {

@@ -3,7 +3,7 @@ use core::fmt;
 use std::{sync::Arc, u16, u8};
 
 use crate::{
-    archive_common::{ExtraField, ExtraFieldExtendedTimestamp},
+    archive_common::{ExtraField, ExtraFieldExtendedTimestamp, ExtraFieldZIP64ExtendedInformation},
     compression::CompressionMethod,
     constants::{MS_DIR, S_IFDIR, VERSION_USES_ZIP64_FORMAT_EXTENSIONS},
 };
@@ -33,7 +33,6 @@ pub struct ArchiveFileEntry {
     pub external_file_attributes: u32,
     pub file_comment: Option<Vec<u8>>,
     pub extra_fields: Vec<Arc<dyn ExtraField>>,
-    pub has_zip64_extra_field: bool,
 }
 
 impl ArchiveFileEntry {
@@ -133,6 +132,26 @@ impl ArchiveFileEntry {
             };
         }
         None
+    }
+
+    fn has_zip64_extra_field(&self) -> bool {
+        for extra_field_box in self.extra_fields.iter() {
+            if extra_field_box
+                .as_any()
+                .downcast_ref::<ExtraFieldZIP64ExtendedInformation>()
+                .is_some()
+            {
+                return true;
+            };
+        }
+        false
+    }
+
+    pub(crate) fn need_to_add_zip64_extra_field(&mut self) {
+        if !self.has_zip64_extra_field() && self.is_zip64() {
+            let zip_extra_field = ExtraFieldZIP64ExtendedInformation::default();
+            self.extra_fields.push(Arc::new(zip_extra_field));
+        }
     }
 }
 
