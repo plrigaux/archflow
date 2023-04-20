@@ -77,7 +77,7 @@ mod timestamp_tests {
 
         assert!(archive_descriptor.is_empty());
 
-        extrafield.file_header_write_data(&mut archive_descriptor, &archive_file_entry);
+        extrafield.local_header_write_data(&mut archive_descriptor, &archive_file_entry);
 
         assert!(archive_descriptor.is_empty());
 
@@ -88,16 +88,16 @@ mod timestamp_tests {
         assert!(!archive_descriptor.is_empty());
         assert_eq!(
             archive_descriptor.len(),
-            extrafield.central_header_extra_field_size() as usize
+            extrafield.central_header_extra_field_size(&archive_file_entry) as usize
         );
 
         archive_descriptor.clear();
-        extrafield.file_header_write_data(&mut archive_descriptor, &archive_file_entry);
+        extrafield.local_header_write_data(&mut archive_descriptor, &archive_file_entry);
 
         assert!(!archive_descriptor.is_empty());
         assert_eq!(
             archive_descriptor.len(),
-            extrafield.file_header_extra_field_size() as usize
+            extrafield.local_header_extra_field_size(&archive_file_entry) as usize
         );
     }
 }

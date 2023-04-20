@@ -351,9 +351,9 @@ impl CentralDirectoryEnd {
 }
 
 pub trait ExtraFields: Debug + Send + Sync {
-    fn file_header_extra_field_size(&self) -> u16;
-    fn central_header_extra_field_size(&self) -> u16;
-    fn file_header_write_data(
+    fn local_header_extra_field_size(&self, archive_file_entry: &ArchiveFileEntry) -> u16;
+    fn central_header_extra_field_size(&self, archive_file_entry: &ArchiveFileEntry) -> u16;
+    fn local_header_write_data(
         &self,
         archive_descriptor: &mut ArchiveDescriptor,
         archive_file_entry: &ArchiveFileEntry,
@@ -547,15 +547,15 @@ impl ExtraFieldExtendedTimestamp {
 }
 
 impl ExtraFields for ExtraFieldExtendedTimestamp {
-    fn file_header_extra_field_size(&self) -> u16 {
+    fn local_header_extra_field_size(&self, _archive_file_entry: &ArchiveFileEntry) -> u16 {
         4 + self.file_header_extra_field_data_size()
     }
 
-    fn central_header_extra_field_size(&self) -> u16 {
+    fn central_header_extra_field_size(&self, _archive_file_entry: &ArchiveFileEntry) -> u16 {
         4 + self.central_header_extra_field_data_size()
     }
 
-    fn file_header_write_data(
+    fn local_header_write_data(
         &self,
         archive_descriptor: &mut ArchiveDescriptor,
         _archive_file_entry: &ArchiveFileEntry,
@@ -644,21 +644,26 @@ impl ExtraFields for ExtraFieldExtendedTimestamp {
 /// directory record field is set to 0xFFFF or 0xFFFFFFFF.
 ///
 /// If one entry does not fit into the classic LOC or CEN record,
-/// only that entry is required to be moved into a ZIP64 extra
+/// _only that entry is required_ to be moved into a ZIP64 extra
 /// field. The other entries may stay in the classic record.
 /// Therefore, not all entries shown in the following table
 /// might be stored in a ZIP64 extra field. However,
 /// if they appear, their order must be as shown in the table.
 ///
 /// Note: all fields stored in Intel low-byte/high-byte order.
-#[derive(Debug)]
-pub struct ExtraFieldZIP64ExtendedInformation {}
+///
+/// This entry in the Local header must include BOTH original
+/// and compressed file sizes.
+#[derive(Debug, Default)]
+pub struct ExtraFieldZIP64ExtendedInformation {
+    parsed_sized: u16,
+}
 
 impl ExtraFieldZIP64ExtendedInformation {
     pub const HEADER_ID: u16 = 0x0001;
     const ZIP64_EXTRA_FIELD_SIZE: u16 = 8 * 3 + 4;
-    pub fn new() -> Self {
-        Self {}
+    pub fn new(parsed_sized: u16) -> Self {
+        Self { parsed_sized }
     }
 
     pub fn parse_extra_field(
@@ -688,29 +693,45 @@ impl ExtraFieldZIP64ExtendedInformation {
             }
         }
 
-        Self::new()
+        Self::new(extra_field_data_size)
     }
 }
 
 impl ExtraFields for ExtraFieldZIP64ExtendedInformation {
-    fn file_header_extra_field_size(&self) -> u16 {
-        todo!()
+    fn local_header_extra_field_size(&self, _archive_file_entry: &ArchiveFileEntry) -> u16 {
+        16
     }
 
-    fn central_header_extra_field_size(&self) -> u16 {
-        todo!()
+    fn central_header_extra_field_size(&self, archive_file_entry: &ArchiveFileEntry) -> u16 {
+        let size: u16 = if archive_file_entry.file_disk_number >= u16::MAX as u32 {
+            28
+        } else if archive_file_entry.offset >= u32::MAX as u64 {
+            24
+        } else if archive_file_entry.compressed_size >= u32::MAX as u64 {
+            16
+        } else if archive_file_entry.uncompressed_size >= u32::MAX as u64 {
+            8
+        } else {
+            0
+        };
+        size
     }
 
-    fn file_header_write_data(
+    fn local_header_write_data(
         &self,
         archive_descriptor: &mut ArchiveDescriptor,
         archive_file_entry: &ArchiveFileEntry,
     ) {
+        let size = self.local_header_extra_field_size(archive_file_entry);
+        //If uncompressed size == 0 it do zero padding
         if archive_file_entry.uncompressed_size == 0 {
-            archive_descriptor
-                .write_zeros(ExtraFieldZIP64ExtendedInformation::ZIP64_EXTRA_FIELD_SIZE as usize);
+            archive_descriptor.write_zeros(size as usize);
         } else {
             self.central_header_extra_write_data(archive_descriptor, archive_file_entry);
+            archive_descriptor.write_u16(ExtraFieldZIP64ExtendedInformation::HEADER_ID);
+            archive_descriptor.write_u16(size);
+            archive_descriptor.write_u64(archive_file_entry.uncompressed_size);
+            archive_descriptor.write_u64(archive_file_entry.compressed_size);
         }
     }
 
@@ -719,15 +740,11 @@ impl ExtraFields for ExtraFieldZIP64ExtendedInformation {
         archive_descriptor: &mut ArchiveDescriptor,
         archive_file_entry: &ArchiveFileEntry,
     ) {
-        let size = if archive_file_entry.file_disk_number >= u16::MAX as u32 {
-            28
-        } else if archive_file_entry.offset >= u32::MAX as u64 {
-            24
-        } else if archive_file_entry.compressed_size >= u32::MAX as u64 {
-            16
-        } else {
-            8
-        };
+        let size = self.central_header_extra_field_size(archive_file_entry);
+
+        if size == 0 {
+            return;
+        }
 
         archive_descriptor.write_u16(ExtraFieldZIP64ExtendedInformation::HEADER_ID);
         archive_descriptor
@@ -754,7 +771,7 @@ impl ExtraFields for ExtraFieldZIP64ExtendedInformation {
         format!(
             "- A subfield with ID 0x{:04X} (Zip64) and {} data bytes.",
             ExtraFieldZIP64ExtendedInformation::HEADER_ID,
-            ExtraFieldZIP64ExtendedInformation::ZIP64_EXTRA_FIELD_SIZE, //WRONG BUT PLACEHOLDER
+            self.parsed_sized,
         )
     }
 }
@@ -778,15 +795,15 @@ impl ExtraFieldUnknown {
 }
 
 impl ExtraFields for ExtraFieldUnknown {
-    fn file_header_extra_field_size(&self) -> u16 {
-        self.central_header_extra_field_size()
+    fn local_header_extra_field_size(&self, archive_file_entry: &ArchiveFileEntry) -> u16 {
+        self.central_header_extra_field_size(archive_file_entry)
     }
 
-    fn central_header_extra_field_size(&self) -> u16 {
+    fn central_header_extra_field_size(&self, _archive_file_entry: &ArchiveFileEntry) -> u16 {
         self.data.len() as u16
     }
 
-    fn file_header_write_data(
+    fn local_header_write_data(
         &self,
         archive_descriptor: &mut ArchiveDescriptor,
         archive_file_entry: &ArchiveFileEntry,
@@ -797,10 +814,10 @@ impl ExtraFields for ExtraFieldUnknown {
     fn central_header_extra_write_data(
         &self,
         archive_descriptor: &mut ArchiveDescriptor,
-        _archive_file_entry: &ArchiveFileEntry,
+        archive_file_entry: &ArchiveFileEntry,
     ) {
         archive_descriptor.write_u16(self.header_id);
-        archive_descriptor.write_u16(self.central_header_extra_field_size());
+        archive_descriptor.write_u16(self.central_header_extra_field_size(archive_file_entry));
         archive_descriptor.write_bytes(&self.data);
     }
 
