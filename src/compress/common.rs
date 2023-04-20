@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use crate::{
     archive_common::{
-        ArchiveDescriptor, CentralDirectoryEnd, ExtraFieldExtendedTimestamp,
-        ExtraFieldZIP64ExtendedInformation, ExtraFields,
+        ArchiveDescriptor, CentralDirectoryEnd, ExtraField, ExtraFieldExtendedTimestamp,
+        ExtraFieldZIP64ExtendedInformation,
     },
     compression::CompressionMethod,
     constants::{
@@ -163,7 +163,7 @@ pub fn build_file_header(
     let mut minimum_version_needed_to_extract = compressor.zip_version_needed();
     let version_made_by = options.system.update_version_needed(VERSION_MADE_BY);
 
-    let mut extra_fields: Vec<Arc<dyn ExtraFields>> = Vec::new();
+    let mut extra_fields: Vec<Arc<dyn ExtraField>> = Vec::new();
 
     let mut zip64_extra_field_added = false;
     let mut extrafield_zip64: Option<Arc<ExtraFieldZIP64ExtendedInformation>> = None;

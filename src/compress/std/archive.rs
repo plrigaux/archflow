@@ -1,7 +1,7 @@
 use super::compressor::compress;
 use super::write_wrapper::{CommonWrapper, WriteSeekWrapper, WriteWrapper};
 
-use crate::archive_common::{ArchiveDescriptor, ExtraFieldZIP64ExtendedInformation, ExtraFields};
+use crate::archive_common::{ArchiveDescriptor, ExtraField, ExtraFieldZIP64ExtendedInformation};
 use crate::compress::common::{
     build_central_directory_end, build_central_directory_file_header, build_data_descriptor,
     build_file_header, build_file_sizes_update, is_streaming, SubZipArchiveData, ZipArchiveCommon,
@@ -152,7 +152,7 @@ impl<'a, W: Write + 'a> ZipArchive<'a, W> {
                 if let Some(zip64_extra_field_arc) = extrafield_zip64_arc {
                     let mut file_descriptor = ArchiveDescriptor::new(30);
 
-                    let zip64_extra_field: &dyn ExtraFields = zip64_extra_field_arc.as_ref();
+                    let zip64_extra_field: &dyn ExtraField = zip64_extra_field_arc.as_ref();
                     zip64_extra_field
                         .local_header_write_data(&mut file_descriptor, &archive_file_entry);
 

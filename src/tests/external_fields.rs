@@ -1,6 +1,6 @@
 mod timestamp_tests {
     use crate::{
-        archive_common::{ArchiveDescriptor, ExtraFieldExtendedTimestamp, ExtraFields},
+        archive_common::{ArchiveDescriptor, ExtraField, ExtraFieldExtendedTimestamp},
         types::ArchiveFileEntry,
     };
 

@@ -3,7 +3,7 @@ use core::fmt;
 use std::{sync::Arc, u16, u8};
 
 use crate::{
-    archive_common::{ExtraFieldExtendedTimestamp, ExtraFields},
+    archive_common::{ExtraField, ExtraFieldExtendedTimestamp},
     compression::CompressionMethod,
     constants::{MS_DIR, S_IFDIR, VERSION_USES_ZIP64_FORMAT_EXTENSIONS},
 };
@@ -32,7 +32,7 @@ pub struct ArchiveFileEntry {
     pub internal_file_attributes: u16,
     pub external_file_attributes: u32,
     pub file_comment: Option<Vec<u8>>,
-    pub extra_fields: Vec<Arc<dyn ExtraFields>>,
+    pub extra_fields: Vec<Arc<dyn ExtraField>>,
     pub has_zip64_extra_field: bool,
 }
 

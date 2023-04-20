@@ -350,7 +350,7 @@ impl CentralDirectoryEnd {
     }
 }
 
-pub trait ExtraFields: Debug + Send + Sync {
+pub trait ExtraField: Debug + Send + Sync {
     fn local_header_extra_field_size(&self, archive_file_entry: &ArchiveFileEntry) -> u16;
     fn central_header_extra_field_size(&self, archive_file_entry: &ArchiveFileEntry) -> u16;
     fn local_header_write_data(
@@ -546,7 +546,7 @@ impl ExtraFieldExtendedTimestamp {
     }
 }
 
-impl ExtraFields for ExtraFieldExtendedTimestamp {
+impl ExtraField for ExtraFieldExtendedTimestamp {
     fn local_header_extra_field_size(&self, _archive_file_entry: &ArchiveFileEntry) -> u16 {
         4 + self.file_header_extra_field_data_size()
     }
@@ -697,7 +697,7 @@ impl ExtraFieldZIP64ExtendedInformation {
     }
 }
 
-impl ExtraFields for ExtraFieldZIP64ExtendedInformation {
+impl ExtraField for ExtraFieldZIP64ExtendedInformation {
     fn local_header_extra_field_size(&self, _archive_file_entry: &ArchiveFileEntry) -> u16 {
         16
     }
@@ -794,7 +794,7 @@ impl ExtraFieldUnknown {
     }
 }
 
-impl ExtraFields for ExtraFieldUnknown {
+impl ExtraField for ExtraFieldUnknown {
     fn local_header_extra_field_size(&self, archive_file_entry: &ArchiveFileEntry) -> u16 {
         self.central_header_extra_field_size(archive_file_entry)
     }

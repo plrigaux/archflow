@@ -1,6 +1,6 @@
 use crate::archive_common::{
-    ArchiveDescriptorReader, CentralDirectoryEnd, ExtraFieldExtendedTimestamp, ExtraFieldUnknown,
-    ExtraFieldZIP64ExtendedInformation, ExtraFields,
+    ArchiveDescriptorReader, CentralDirectoryEnd, ExtraField, ExtraFieldExtendedTimestamp,
+    ExtraFieldUnknown, ExtraFieldZIP64ExtendedInformation,
 };
 use crate::compression::CompressionMethod;
 use crate::constants::{CENTRAL_DIRECTORY_ENTRY_BASE_SIZE, CENTRAL_DIRECTORY_ENTRY_SIGNATURE};
@@ -259,7 +259,7 @@ impl<R: Read + Seek> ArchiveReader<R> {
 fn parse_extra_fields(
     extra_field_as_bytes: Vec<u8>,
     archive_file_entry: &mut ArchiveFileEntry,
-) -> Vec<Box<dyn ExtraFields>> {
+) -> Vec<Box<dyn ExtraField>> {
     let mut indexer = ArchiveDescriptorReader::new();
     let extra_fields = Vec::with_capacity(10);
 
@@ -267,7 +267,7 @@ fn parse_extra_fields(
         let extra_field_header_id = indexer.read_u16(&extra_field_as_bytes);
         let extra_field_data_size = indexer.read_u16(&extra_field_as_bytes);
 
-        let extra_field: Arc<dyn ExtraFields> = match extra_field_header_id {
+        let extra_field: Arc<dyn ExtraField> = match extra_field_header_id {
             ExtraFieldZIP64ExtendedInformation::HEADER_ID => {
                 let ef = ExtraFieldZIP64ExtendedInformation::parse_extra_field(
                     &mut indexer,
