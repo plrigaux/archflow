@@ -1,10 +1,9 @@
 use crate::archive_common::{
-    ArchiveDescriptorReader, CentralDirectoryEnd, ExtraField, ExtraFieldExtendedTimestamp,
-    ExtraFieldUnknown, ExtraFieldZIP64ExtendedInformation,
+    ArchiveDescriptorReader, ArchiveFileEntry, CentralDirectoryEnd, ExtraField,
+    ExtraFieldExtendedTimestamp, ExtraFieldUnknown, ExtraFieldZIP64ExtendedInformation,
 };
 use crate::compression::CompressionMethod;
 use crate::constants::{CENTRAL_DIRECTORY_ENTRY_BASE_SIZE, CENTRAL_DIRECTORY_ENTRY_SIGNATURE};
-use crate::types::ArchiveFileEntry;
 use crate::{
     constants::{CENTRAL_DIRECTORY_END_SIGNATURE, END_OF_CENTRAL_DIRECTORY_SIZE},
     error::ArchiveError,

@@ -1,7 +1,6 @@
 mod timestamp_tests {
-    use crate::{
-        archive_common::{ArchiveDescriptor, ExtraField, ExtraFieldExtendedTimestamp},
-        types::ArchiveFileEntry,
+    use crate::archive_common::{
+        ArchiveDescriptor, ArchiveFileEntry, ExtraField, ExtraFieldExtendedTimestamp,
     };
 
     const TEST_DATA: Option<i32> = Some(1582248020);

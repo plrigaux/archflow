@@ -1,7 +1,7 @@
 use super::async_wrapper::{AsyncWriteSeekWrapper, AsyncWriteWrapper, CommonWrapper};
 use super::compressor::compress;
 
-use crate::archive_common::{ArchiveDescriptor, ExtraField};
+use crate::archive_common::{ArchiveDescriptor, ExtraField, ExtraFieldZIP64ExtendedInformation};
 use crate::compress::common::{
     build_central_directory_end, build_central_directory_file_header, build_data_descriptor,
     build_file_header, build_file_sizes_update, is_streaming, SubZipArchiveData,
@@ -97,7 +97,7 @@ impl<'a, W: AsyncWrite + Unpin + Send + 'a> ZipArchive<'a, W> {
         let mut hasher = Hasher::new();
         let compressor = options.compression_method;
 
-        let (file_header, mut archive_file_entry, extrafield_zip64_arc) = build_file_header(
+        let (file_header, mut archive_file_entry) = build_file_header(
             file_name,
             options,
             compressor,
@@ -152,9 +152,11 @@ impl<'a, W: AsyncWrite + Unpin + Send + 'a> ZipArchive<'a, W> {
                 .local_header_write_data(&mut file_descriptor, &archive_file_entry); */
 
             if archive_file_entry.is_zip64() {
-                if let Some(zip64_extra_field_arc) = extrafield_zip64_arc {
+                if archive_file_entry.has_zip64_extra_field() {
                     let mut file_descriptor = ArchiveDescriptor::new(30);
-                    let zip64_extra_field: &dyn ExtraField = zip64_extra_field_arc.as_ref();
+
+                    let zip64_extra_field: &dyn ExtraField =
+                        &ExtraFieldZIP64ExtendedInformation::default();
                     zip64_extra_field
                         .local_header_write_data(&mut file_descriptor, &archive_file_entry);
 
@@ -206,7 +208,7 @@ impl<'a, W: AsyncWrite + Unpin + Send + 'a> ZipArchive<'a, W> {
             }
         };
 
-        let (file_header, mut archive_file_entry, _extrafield_zip64_arc) = build_file_header(
+        let (file_header, mut archive_file_entry) = build_file_header(
             &new_file_name,
             options,
             compressor,

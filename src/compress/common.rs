@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use crate::{
     archive_common::{
-        ArchiveDescriptor, CentralDirectoryEnd, ExtraField, ExtraFieldExtendedTimestamp,
-        ExtraFieldZIP64ExtendedInformation,
+        ArchiveDescriptor, ArchiveFileEntry, CentralDirectoryEnd, ExtraField,
+        ExtraFieldExtendedTimestamp, ExtraFieldZIP64ExtendedInformation,
     },
     compression::CompressionMethod,
     constants::{
@@ -12,7 +12,6 @@ use crate::{
         LOCAL_FILE_HEADER_SIGNATURE, MS_DIR, S_IFDIR, S_IFREG, VERSION_MADE_BY,
         ZIP64_DESCRIPTOR_SIZE,
     },
-    types::ArchiveFileEntry,
 };
 
 /// Fast routine for detection of plain text
@@ -132,11 +131,7 @@ pub fn build_file_header(
     offset: u64,
     data: &SubZipArchiveData,
     is_dir: bool,
-) -> (
-    ArchiveDescriptor,
-    ArchiveFileEntry,
-    Option<Arc<ExtraFieldZIP64ExtendedInformation>>,
-) {
+) -> (ArchiveDescriptor, ArchiveFileEntry) {
     let file_nameas_bytes = file_name.as_bytes();
     let file_name_as_bytes_own = file_nameas_bytes.to_owned();
     let file_name_len = file_name_as_bytes_own.len() as u16;
@@ -246,7 +241,7 @@ pub fn build_file_header(
     file_header.write_bytes(&file_name_as_bytes_own);
     file_header.write_bytes(extended_data_buffer.bytes());
 
-    (file_header, archive_file_entry, extrafield_zip64.clone())
+    (file_header, archive_file_entry)
 }
 
 pub fn build_central_directory_file_header(
