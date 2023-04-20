@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use crate::{
     archive_common::{
         ArchiveDescriptor, CentralDirectoryEnd, ExtraFieldExtendedTimestamp,
@@ -130,7 +132,11 @@ pub fn build_file_header(
     offset: u64,
     data: &SubZipArchiveData,
     is_dir: bool,
-) -> (ArchiveDescriptor, ArchiveFileEntry, u64) {
+) -> (
+    ArchiveDescriptor,
+    ArchiveFileEntry,
+    Option<Arc<ExtraFieldZIP64ExtendedInformation>>,
+) {
     let file_nameas_bytes = file_name.as_bytes();
     let file_name_as_bytes_own = file_nameas_bytes.to_owned();
     let file_name_len = file_name_as_bytes_own.len() as u16;
@@ -157,7 +163,17 @@ pub fn build_file_header(
     let mut minimum_version_needed_to_extract = compressor.zip_version_needed();
     let version_made_by = options.system.update_version_needed(VERSION_MADE_BY);
 
-    let mut extra_fields: Vec<Box<dyn ExtraFields>> = Vec::new();
+    let mut extra_fields: Vec<Arc<dyn ExtraFields>> = Vec::new();
+
+    let mut zip64_extra_field_added = false;
+    let mut extrafield_zip64: Option<Arc<ExtraFieldZIP64ExtendedInformation>> = None;
+    if options.large_file && !is_streaming(data.base_flags) {
+        let ts = ExtraFieldZIP64ExtendedInformation::default();
+        let b: Arc<ExtraFieldZIP64ExtendedInformation> = Arc::new(ts);
+        extrafield_zip64 = Some(b.clone());
+        extra_fields.push(b);
+        zip64_extra_field_added = true;
+    }
 
     if options.last_modified_time.extended_timestamp()
         || options.last_creation_time.is_some()
@@ -168,15 +184,7 @@ pub fn build_file_header(
             options.last_access_time,
             options.last_creation_time,
         );
-        extra_fields.push(Box::new(ts));
-    }
-
-    let mut zip64_extra_field_added = false;
-    if options.large_file && !is_streaming(data.base_flags) {
-        //Be sure to make it last
-        let ts = ExtraFieldZIP64ExtendedInformation::new();
-        extra_fields.push(Box::new(ts));
-        zip64_extra_field_added = true;
+        extra_fields.push(Arc::new(ts));
     }
 
     let (unix_ftype, default_permission, ms_dos_attr) = if is_dir {
@@ -220,13 +228,8 @@ pub fn build_file_header(
 
     let mut extended_data_buffer = ArchiveDescriptor::new(500);
 
-    let mut zip_extra_offset: u64 = 0;
-    let mut it = archive_file_entry.extra_fields.iter().peekable();
-    while let Some(extra_field) = it.next() {
-        if it.peek().is_none() {
-            zip_extra_offset = extended_data_buffer.len() as u64;
-        }
-        extra_field.file_header_write_data(&mut extended_data_buffer, &archive_file_entry);
+    if let Some(ref extra_field) = extrafield_zip64 {
+        extra_field.local_header_write_data(&mut extended_data_buffer, &archive_file_entry);
     }
 
     archive_file_entry.extra_field_length = extended_data_buffer.len() as u16;
@@ -246,7 +249,7 @@ pub fn build_file_header(
     file_header.write_bytes(&file_name_as_bytes_own);
     file_header.write_bytes(extended_data_buffer.bytes());
 
-    (file_header, archive_file_entry, zip_extra_offset)
+    (file_header, archive_file_entry, extrafield_zip64.clone())
 }
 
 pub fn build_central_directory_file_header(

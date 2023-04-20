@@ -1,7 +1,7 @@
 use super::compressor::compress;
 use super::write_wrapper::{CommonWrapper, WriteSeekWrapper, WriteWrapper};
 
-use crate::archive_common::{ArchiveDescriptor, ExtraFieldZIP64ExtendedInformation};
+use crate::archive_common::{ArchiveDescriptor, ExtraFieldZIP64ExtendedInformation, ExtraFields};
 use crate::compress::common::{
     build_central_directory_end, build_central_directory_file_header, build_data_descriptor,
     build_file_header, build_file_sizes_update, is_streaming, SubZipArchiveData, ZipArchiveCommon,
@@ -12,6 +12,8 @@ use crate::constants::{EXTENDED_LOCAL_HEADER_FLAG, FILE_HEADER_BASE_SIZE, FILE_H
 use crate::error::ArchiveError;
 use crc32fast::Hasher;
 use std::io::{Read, Seek, SeekFrom, Write};
+
+use std::sync::Arc;
 
 /// A zip archive.
 ///
@@ -101,7 +103,7 @@ impl<'a, W: Write + 'a> ZipArchive<'a, W> {
         let mut hasher = Hasher::new();
         let compressor = options.compression_method;
 
-        let (file_header, mut archive_file_entry, zip_extra_offset) = build_file_header(
+        let (file_header, mut archive_file_entry, extrafield_zip64_arc) = build_file_header(
             file_name,
             options,
             compressor,
@@ -147,20 +149,19 @@ impl<'a, W: Write + 'a> ZipArchive<'a, W> {
             self.sink.seek(SeekFrom::Start(archive_size))?;
 
             if archive_file_entry.is_zip64() {
-                if options.large_file {
-                    if let Some(zip64_extra_field) = archive_file_entry.extra_fields.last() {
-                        let mut file_descriptor = ArchiveDescriptor::new(30);
-                        zip64_extra_field
-                            .file_header_write_data(&mut file_descriptor, &archive_file_entry);
+                if let Some(zip64_extra_field_arc) = extrafield_zip64_arc {
+                    let mut file_descriptor = ArchiveDescriptor::new(30);
 
-                        self.sink.seek(SeekFrom::Start(
-                            file_header_offset + FILE_HEADER_BASE_SIZE + zip_extra_offset,
-                        ))?;
+                    let zip64_extra_field: &dyn ExtraFields = zip64_extra_field_arc.as_ref();
+                    zip64_extra_field
+                        .local_header_write_data(&mut file_descriptor, &archive_file_entry);
 
-                        self.sink.write_all(file_descriptor.buffer())?;
-                        //position back at the end
-                        self.sink.seek(SeekFrom::Start(archive_size))?;
-                    }
+                    self.sink
+                        .seek(SeekFrom::Start(file_header_offset + FILE_HEADER_BASE_SIZE))?;
+
+                    self.sink.write_all(file_descriptor.buffer())?;
+                    //position back at the end
+                    self.sink.seek(SeekFrom::Start(archive_size))?;
                 }
             } else {
                 //it wasn't identified as zip64 from option, but it can be as stream
@@ -170,10 +171,10 @@ impl<'a, W: Write + 'a> ZipArchive<'a, W> {
         }
 
         if !archive_file_entry.has_zip64_extra_field && archive_file_entry.is_zip64() {
-            let zip_extra_field = ExtraFieldZIP64ExtendedInformation::new();
+            let zip_extra_field = ExtraFieldZIP64ExtendedInformation::default();
             archive_file_entry
                 .extra_fields
-                .push(Box::new(zip_extra_field));
+                .push(Arc::new(zip_extra_field));
         }
 
         self.data.add_archive_file_entry(archive_file_entry);
@@ -207,7 +208,7 @@ impl<'a, W: Write + 'a> ZipArchive<'a, W> {
             }
         };
 
-        let (file_header, mut archive_file_entry, _zip_extra_offset) = build_file_header(
+        let (file_header, mut archive_file_entry, _extrafield_zip64_arc) = build_file_header(
             &new_file_name,
             options,
             compressor,
