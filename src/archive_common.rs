@@ -3,7 +3,6 @@ use std::fmt::Debug;
 use std::fmt::Display;
 use std::fmt::Formatter;
 use std::str;
-use std::sync::Arc;
 use std::u32;
 use std::u8;
 
@@ -869,7 +868,7 @@ pub struct ArchiveFileEntry {
     pub internal_file_attributes: u16,
     pub external_file_attributes: u32,
     pub file_comment: Option<Vec<u8>>,
-    pub extra_fields: Vec<Arc<dyn ExtraField>>,
+    pub extra_fields: Vec<Box<dyn ExtraField>>,
 }
 
 impl ArchiveFileEntry {
@@ -984,10 +983,10 @@ impl ArchiveFileEntry {
         false
     }
 
-    pub(crate) fn need_to_add_zip64_extra_field(&mut self) {
+    pub fn need_to_add_zip64_extra_field(&mut self) {
         if !self.has_zip64_extra_field() && self.is_zip64() {
             let zip_extra_field = ExtraFieldZIP64ExtendedInformation::default();
-            self.extra_fields.push(Arc::new(zip_extra_field));
+            self.extra_fields.push(Box::new(zip_extra_field));
         }
     }
 }

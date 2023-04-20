@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use crate::{
     archive_common::{
         ArchiveDescriptor, ArchiveFileEntry, CentralDirectoryEnd, ExtraField,
@@ -158,14 +156,13 @@ pub fn build_file_header(
     let mut minimum_version_needed_to_extract = compressor.zip_version_needed();
     let version_made_by = options.system.update_version_needed(VERSION_MADE_BY);
 
-    let mut extra_fields: Vec<Arc<dyn ExtraField>> = Vec::new();
+    let mut extra_fields: Vec<Box<dyn ExtraField>> = Vec::new();
 
-    let mut extrafield_zip64: Option<Arc<ExtraFieldZIP64ExtendedInformation>> = None;
     if options.large_file && !is_streaming(data.base_flags) {
-        let ts = ExtraFieldZIP64ExtendedInformation::default();
-        let b: Arc<ExtraFieldZIP64ExtendedInformation> = Arc::new(ts);
-        extrafield_zip64 = Some(b.clone());
-        extra_fields.push(b);
+        let zip64_extrafield: ExtraFieldZIP64ExtendedInformation =
+            ExtraFieldZIP64ExtendedInformation::default();
+
+        extra_fields.push(Box::new(zip64_extrafield));
     }
 
     if options.last_modified_time.extended_timestamp()
@@ -177,7 +174,7 @@ pub fn build_file_header(
             options.last_access_time,
             options.last_creation_time,
         );
-        extra_fields.push(Arc::new(ts));
+        extra_fields.push(Box::new(ts));
     }
 
     let (unix_ftype, default_permission, ms_dos_attr) = if is_dir {
@@ -219,29 +216,28 @@ pub fn build_file_header(
     };
 
     let mut extended_data_buffer = ArchiveDescriptor::new(500);
-
-    if let Some(ref extra_field) = extrafield_zip64 {
-        extra_field.local_header_write_data(&mut extended_data_buffer, &archive_file_entry);
+    for extra_field in &archive_file_entry.extra_fields {
+        extra_field.local_header_write_data(&mut extended_data_buffer, &archive_file_entry)
     }
 
     archive_file_entry.extra_field_length = extended_data_buffer.len() as u16;
 
-    let mut file_header = ArchiveDescriptor::new(FILE_HEADER_BASE_SIZE + file_name_len as u64);
-    file_header.write_u32(LOCAL_FILE_HEADER_SIGNATURE);
-    file_header.write_u16(minimum_version_needed_to_extract);
-    file_header.write_u16(general_purpose_flags);
-    file_header.write_u16(archive_file_entry.compression_method);
-    file_header.write_u16(time);
-    file_header.write_u16(date);
-    file_header.write_u32(0); // CRC-32
-    file_header.write_u32(0); // compressed size
-    file_header.write_u32(0); // uncompressed size
-    file_header.write_u16(file_name_len); // file name length
-    file_header.write_u16(archive_file_entry.extra_field_length); //extra field length
-    file_header.write_bytes(&file_name_as_bytes_own);
-    file_header.write_bytes(extended_data_buffer.bytes());
+    let mut local_header = ArchiveDescriptor::new(FILE_HEADER_BASE_SIZE + file_name_len as u64);
+    local_header.write_u32(LOCAL_FILE_HEADER_SIGNATURE);
+    local_header.write_u16(minimum_version_needed_to_extract);
+    local_header.write_u16(general_purpose_flags);
+    local_header.write_u16(archive_file_entry.compression_method);
+    local_header.write_u16(time);
+    local_header.write_u16(date);
+    local_header.write_u32(0); // CRC-32
+    local_header.write_u32(0); // compressed size
+    local_header.write_u32(0); // uncompressed size
+    local_header.write_u16(file_name_len); // file name length
+    local_header.write_u16(archive_file_entry.extra_field_length); //extra field length
+    local_header.write_bytes(&file_name_as_bytes_own);
+    local_header.write_bytes(extended_data_buffer.bytes());
 
-    (file_header, archive_file_entry)
+    (local_header, archive_file_entry)
 }
 
 pub fn build_central_directory_file_header(

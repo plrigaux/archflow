@@ -11,7 +11,6 @@ use crate::{
 use byteorder::{LittleEndian, ReadBytesExt};
 use std::fmt::{Debug, Display};
 use std::io::{Read, Seek, SeekFrom};
-use std::sync::Arc;
 
 pub struct ArchiveReader<R>
 where
@@ -265,7 +264,7 @@ fn parse_extra_fields(
         let extra_field_header_id = indexer.read_u16(&extra_field_as_bytes);
         let extra_field_data_size = indexer.read_u16(&extra_field_as_bytes);
 
-        let extra_field: Arc<dyn ExtraField> = match extra_field_header_id {
+        let extra_field: Box<dyn ExtraField> = match extra_field_header_id {
             ExtraFieldZIP64ExtendedInformation::HEADER_ID => {
                 let ef = ExtraFieldZIP64ExtendedInformation::parse_extra_field(
                     &mut indexer,
@@ -273,7 +272,7 @@ fn parse_extra_fields(
                     extra_field_data_size,
                     archive_file_entry,
                 );
-                Arc::new(ef)
+                Box::new(ef)
             }
             ExtraFieldExtendedTimestamp::HEADER_ID => {
                 let ef = ExtraFieldExtendedTimestamp::parse_extra_field(
@@ -282,7 +281,7 @@ fn parse_extra_fields(
                     extra_field_data_size,
                 );
 
-                Arc::new(ef)
+                Box::new(ef)
             }
             _ => {
                 let ef = ExtraFieldUnknown::parse_extra_field(
@@ -291,7 +290,7 @@ fn parse_extra_fields(
                     extra_field_data_size,
                     extra_field_header_id,
                 );
-                Arc::new(ef)
+                Box::new(ef)
             }
         };
 
