@@ -19,6 +19,7 @@ use crate::constants::X5455_EXTENDEDTIMESTAMP;
 use crate::constants::ZIP64_CENTRAL_DIRECTORY_END_SIGNATURE;
 
 use crate::constants::ZIP64_END_OF_CENTRAL_DIR_LOCATOR_SIGNATURE;
+#[cfg(any(feature = "experimental"))]
 use crate::error::ArchiveError;
 use crate::types::DateTimeCS;
 use crate::types::FileCompatibilitySystem;
@@ -55,22 +56,15 @@ impl ArchiveDescriptor {
         self.buffer.extend_from_slice(&val.to_le_bytes());
     }
 
-    pub fn write_str(&mut self, val: &str) {
-        self.write_bytes(val.as_bytes());
-    }
-
     pub fn write_bytes(&mut self, val: &[u8]) {
         self.buffer.extend_from_slice(val);
-    }
-
-    pub fn write_bytes_len(&mut self, val: &[u8], max_len: usize) {
-        self.buffer.extend(val.iter().take(max_len));
     }
 
     pub fn write_zeros(&mut self, len: usize) {
         self.buffer.resize(self.len() + len, 0);
     }
 
+    #[cfg(any(feature = "experimental"))]
     pub fn finish(self) -> Vec<u8> {
         self.buffer
     }
@@ -79,6 +73,7 @@ impl ArchiveDescriptor {
         self.buffer.len()
     }
 
+    #[cfg(any(feature = "experimental"))]
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
@@ -87,6 +82,7 @@ impl ArchiveDescriptor {
         &self.buffer
     }
 
+    #[cfg(any(feature = "experimental"))]
     pub fn read_file_descriptor(stream: &[u8]) -> Result<ArchiveFileEntry, ArchiveError> {
         let mut indexer = ArchiveDescriptorReader::new();
 
@@ -139,11 +135,13 @@ impl ArchiveDescriptor {
     }
 }
 
+#[cfg(any(feature = "experimental"))]
 #[derive(Default)]
 pub struct ArchiveDescriptorReader {
     index: usize,
 }
 
+#[cfg(any(feature = "experimental"))]
 macro_rules! read_type {
     ($self:expr, $stream:expr, $typ:ty) => {{
         let upper_bound = $self.index + ::std::mem::size_of::<$typ>();
@@ -170,6 +168,7 @@ macro_rules! read_type {
     }};
 }
 
+#[cfg(any(feature = "experimental"))]
 impl ArchiveDescriptorReader {
     pub fn new() -> ArchiveDescriptorReader {
         ArchiveDescriptorReader { index: 0 }
@@ -260,6 +259,7 @@ pub struct CentralDirectoryEnd {
 }
 
 impl CentralDirectoryEnd {
+    #[cfg(any(feature = "experimental"))]
     pub fn zip_file_comment_length(&self) -> u16 {
         match &self.archive_comment {
             Some(comment) => comment.len() as u16,
@@ -499,6 +499,7 @@ impl ExtraFieldExtendedTimestamp {
         }
     }
 
+    #[cfg(any(feature = "experimental"))]
     pub fn parse_extra_field(
         indexer: &mut ArchiveDescriptorReader,
         extra_field_as_bytes: &[u8],
@@ -673,10 +674,13 @@ pub struct ExtraFieldZIP64ExtendedInformation {
 impl ExtraFieldZIP64ExtendedInformation {
     pub const HEADER_ID: u16 = 0x0001;
     const ZIP64_EXTRA_FIELD_SIZE: u16 = 8 * 3 + 4;
+
+    #[cfg(any(feature = "experimental"))]
     pub fn new(parsed_sized: u16) -> Self {
         Self { parsed_sized }
     }
 
+    #[cfg(any(feature = "experimental"))]
     pub fn parse_extra_field(
         indexer: &mut ArchiveDescriptorReader,
         extra_field_as_bytes: &[u8],
@@ -794,6 +798,7 @@ pub struct ExtraFieldUnknown {
 }
 
 impl ExtraFieldUnknown {
+    #[cfg(any(feature = "experimental"))]
     pub fn parse_extra_field(
         indexer: &mut ArchiveDescriptorReader,
         extra_field_as_bytes: &[u8],
@@ -918,6 +923,7 @@ impl ArchiveFileEntry {
         FileCompatibilitySystem::from_u8(system_code).to_string()
     }
 
+    #[cfg(any(feature = "experimental"))]
     pub fn get_file_name(&self) -> String {
         String::from_utf8_lossy(&self.file_name_as_bytes).to_string()
     }
@@ -950,6 +956,7 @@ impl ArchiveFileEntry {
         }
     }
 
+    #[cfg(any(feature = "experimental"))]
     pub fn is_dir(&mut self) {
         self.internal_file_attributes &= !ArchiveFileEntry::TEXT_INDICATOR
     }
@@ -1292,7 +1299,7 @@ mod test {
         desc.write_u32(uncompressed_size);
         desc.write_u16(file_name_len);
         desc.write_u16(extra_field_length);
-        desc.write_str(file_name);
+        desc.write_bytes(file_name.as_bytes());
         let vec = desc.finish();
 
         println!("desc len {:} \n {:02X?}", &vec.len(), &vec);
