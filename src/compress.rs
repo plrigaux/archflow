@@ -135,9 +135,13 @@ impl<'a> FileOptions<'a> {
 
     /// Set whether the new file's compressed and uncompressed size is more than 4 GiB (0xFFFFFFFF bytes).
     ///
-    /// If set to `false` and the file exceeds the limit, the exra field will be replace by a data descriptor. If set to `true`,
-    /// readers will require ZIP64 support and if the file does not exceed the limit, 20 B are
-    /// wasted. The default is `false`.
+    /// If set to `false` and the file exceeds the limit, the zip64 extra field will be replace by a data descriptor in the local header
+    /// (as for a streamable zip archive).
+    ///
+    /// If set to `true`, the local header will include the zip64 extra field. If the file does not exceed the limit, 20 bytes
+    /// will be wasted.
+    ///
+    /// The default value is `false`.
     pub fn large_file(mut self, large: bool) -> FileOptions<'a> {
         self.large_file = large;
         self

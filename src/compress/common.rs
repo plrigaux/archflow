@@ -7,7 +7,7 @@ use crate::{
     constants::{
         CENTRAL_DIRECTORY_ENTRY_SIGNATURE, DATA_DESCRIPTOR_SIGNATURE, DIR_DEFAULT,
         EXTENDED_LOCAL_HEADER_FLAG, FILE_DEFAULT, FILE_HEADER_BASE_SIZE,
-        LOCAL_FILE_HEADER_SIGNATURE, MS_DIR, S_IFDIR, S_IFREG, VERSION_MADE_BY,
+        LOCAL_FILE_HEADER_SIGNATURE, MS_DIR, S_IFDIR, S_IFREG, UTF8_HEADER_FLAG, VERSION_MADE_BY,
         ZIP64_DESCRIPTOR_SIZE,
     },
 };
@@ -137,13 +137,13 @@ pub fn build_file_header(
     let (date, time) = options.last_modified_time.ms_dos();
     let mut general_purpose_flags: u16 = data.base_flags;
     if file_name_as_bytes_own.len() > file_name.len() {
-        general_purpose_flags |= 1 << 11; //set utf8 flag
+        general_purpose_flags |= UTF8_HEADER_FLAG; //set utf8 flag
     }
 
     let file_comment = if let Some(comment) = options.comment {
         let file_comment_as_bytes_own = comment.as_bytes().to_owned();
         if file_comment_as_bytes_own.len() > comment.len() {
-            general_purpose_flags |= 1 << 11; //set utf8 flag
+            general_purpose_flags |= UTF8_HEADER_FLAG; //set utf8 flag
         }
         Some(file_comment_as_bytes_own)
     } else {
