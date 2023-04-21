@@ -74,7 +74,7 @@
 
  Stream a zip archive as a [actix](https://actix.rs/) response:
 
-```rust
+```rust no_run
  use std::path::Path;
 
  use actix_web::http::header::ContentDisposition;
@@ -158,7 +158,7 @@
 
  Stream a zip archive as a [hyper](https://hyper.rs/) response:
 
-``` rust
+``` rust no_run
 
  use archflow::{
  compress::tokio::archive::ZipArchive, compress::FileOptions, compression::CompressionMethod,
