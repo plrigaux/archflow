@@ -224,18 +224,18 @@ pub fn build_file_header(
 
     let mut local_header = ArchiveDescriptor::new(FILE_HEADER_BASE_SIZE + file_name_len as u64);
     local_header.write_u32(LOCAL_FILE_HEADER_SIGNATURE);
-    local_header.write_u16(minimum_version_needed_to_extract);
-    local_header.write_u16(general_purpose_flags);
+    local_header.write_u16(archive_file_entry.minimum_version_needed_to_extract);
+    local_header.write_u16(archive_file_entry.general_purpose_flags);
     local_header.write_u16(archive_file_entry.compression_method);
-    local_header.write_u16(time);
-    local_header.write_u16(date);
-    local_header.write_u32(0); // CRC-32
-    local_header.write_u32(0); // compressed size
-    local_header.write_u32(0); // uncompressed size
-    local_header.write_u16(file_name_len); // file name length
-    local_header.write_u16(archive_file_entry.extra_field_length); //extra field length
-    local_header.write_bytes(&file_name_as_bytes_own);
-    local_header.write_bytes(extended_data_buffer.bytes());
+    local_header.write_u16(archive_file_entry.last_mod_file_time);
+    local_header.write_u16(archive_file_entry.last_mod_file_date);
+    local_header.write_u32(archive_file_entry.crc32); // CRC-32
+    local_header.write_u32(archive_file_entry.compressed_size as u32); // compressed size
+    local_header.write_u32(archive_file_entry.uncompressed_size as u32); // uncompressed size
+    local_header.write_u16(archive_file_entry.file_name_len); // file name length
+    local_header.write_u16(archive_file_entry.extra_field_length); // extra field length
+    local_header.write_bytes(&archive_file_entry.file_name_as_bytes); // file name
+    local_header.write_bytes(extended_data_buffer.bytes()); // extra fields
 
     (local_header, archive_file_entry)
 }
