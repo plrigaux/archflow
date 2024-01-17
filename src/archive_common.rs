@@ -150,7 +150,7 @@ macro_rules! read_type {
             match $stream[$self.index..upper_bound].try_into() {
                 Ok(v) => v,
                 Err(e) => {
-                    println!("slice with incorrect length {:?}", e);
+                    eprintln!("slice with incorrect length {:?}", e);
                     Default::default()
                 }
             };
@@ -227,20 +227,20 @@ impl ArchiveDescriptorReader {
     pub fn read_bytes(&mut self, stream: &[u8], len: usize) -> Vec<u8> {
         let upper_bound = self.index + len;
 
-        println!(
+/*         println!(
             "read_bytes lb: {:?} up: {:} ({:} bytes) from a {:} length array.",
             self.index,
             upper_bound,
             len,
             stream.len()
-        );
+        ); */
 
         let value = stream[self.index..upper_bound].to_owned();
 
         self.index = upper_bound;
-
+/* 
         println!("read_bytes value: {:?} new index {:}", value, self.index);
-
+ */
         value
     }
 }

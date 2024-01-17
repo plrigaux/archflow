@@ -69,7 +69,7 @@ impl<R: Read + Seek> ArchiveReader<R> {
             //println!("val {:0X} ", val);
             if val == CENTRAL_DIRECTORY_END_SIGNATURE {
                 let signature = stringify!(CENTRAL_DIRECTORY_END_SIGNATURE);
-                println!("{signature} found at {}", position);
+              /*   println!("{signature} found at {}", position); */
                 break;
             }
             /*             if reader.read_u32::<LittleEndian>()? == CENTRAL_DIRECTORY_END_SIGNATURE {
@@ -93,18 +93,18 @@ impl<R: Read + Seek> ArchiveReader<R> {
         let central_end_size: usize = (file_length - position - 4) as usize;
         let mut central_end_buffer: Vec<u8> = vec![0; central_end_size];
 
-        println!(
+/*         println!(
             "central_end_size {} file_length {} location {}",
             central_end_size, file_length, position
-        );
-        println!("vec len  {} ", central_end_buffer.len());
+        ); */
+    /*     println!("vec len  {} ", central_end_buffer.len()); */
         //reader.seek(SeekFrom::Start(pos))?;
 
         reader.read_exact(&mut central_end_buffer)?;
 
         let central_directory_end = Self::read_cental_directory_end(&central_end_buffer)?;
 
-        println!("central_directory_end {:#?}", central_directory_end);
+/*         println!("central_directory_end {:#?}", central_directory_end); */
 
         let archive_file_entry = Self::read_central_directory(&central_directory_end, reader)?;
 
@@ -134,12 +134,12 @@ impl<R: Read + Seek> ArchiveReader<R> {
             let signature = indexer.read_u32(&central_directory_buffer);
 
             if signature != CENTRAL_DIRECTORY_ENTRY_SIGNATURE {
-                println!(
+   /*              println!(
                     "I got {:0X}, I expect {:0X}",
                     signature, CENTRAL_DIRECTORY_ENTRY_SIGNATURE
                 );
 
-                println!("{:X?}", central_directory_buffer);
+                println!("{:X?}", central_directory_buffer); */
                 return Err(ArchiveError::BadArchiveStructure(
                     "Central directory signature not found!".to_owned(),
                 ));

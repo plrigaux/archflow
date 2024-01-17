@@ -94,7 +94,7 @@ impl DateTimeCS {
             match NaiveDate::from_ymd_opt(zero.year as i32, zero.month as u32, zero.day as u32) {
                 Some(date) => date,
                 None => {
-                    println!("Out of range date");
+                    eprintln!("Out of range date");
                     chrono::NaiveDate::default()
                 }
             }

@@ -64,7 +64,7 @@ impl<'a, W: AsyncWrite + Unpin + Send + 'a> ZipArchive<'a, W> {
         match self.sink.get_written_bytes_count() {
             Ok(val) => val,
             Err(e) => {
-                println!("Error: {:?}", e);
+                eprintln!("Error: {:?}", e);
                 0
             }
         }
@@ -237,10 +237,10 @@ impl<'a, W: AsyncWrite + Unpin + Send + 'a> ZipArchive<'a, W> {
         W: AsyncWrite + Unpin,
     {
         let central_directory_offset = self.sink.get_written_bytes_count()?;
-        println!(
+/*         println!(
             "central_directory_offset  {:?}  {:0X}",
             central_directory_offset, central_directory_offset
-        );
+        ); */
         let mut central_directory_header = ArchiveDescriptor::new(500);
 
         for file_info in self.data.iter() {

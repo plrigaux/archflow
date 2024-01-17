@@ -231,16 +231,17 @@ impl<'a, W: Write + 'a> ZipArchive<'a, W> {
         W: Write,
     {
         let central_directory_offset = self.sink.get_written_bytes_count()?;
-        println!(
+/*         println!(
             "central_directory_offset  {:?}  {:0X}",
             central_directory_offset, central_directory_offset
-        );
+        ); */
         let mut central_directory_header = ArchiveDescriptor::new(500);
 
         for file_info in self.data.iter() {
+            /*
             let off = self.sink.get_written_bytes_count()?;
             println!("FILE OFFSET  {:?}  {:0X}", off, off);
-
+ */
             build_central_directory_file_header(&mut central_directory_header, file_info);
 
             self.sink.write_all(central_directory_header.buffer())?;
