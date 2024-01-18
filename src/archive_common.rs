@@ -479,7 +479,7 @@ impl ExtraFieldExtendedTimestamp {
         match self.modify_time {
             Some(time) => {
                 if let Some(datetime) = NaiveDateTime::from_timestamp_opt(time as i64, 0) {
-                    let dt = DateTime::<Utc>::from_utc(datetime, Utc);
+                    let dt = DateTime::<Utc>::from_naive_utc_and_offset(datetime, Utc);
                     Some(dt.to_string())
                 } else {
                     None
