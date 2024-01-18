@@ -157,12 +157,13 @@ macro_rules! read_type {
         let value = <$typ>::from_le_bytes(read);
 
         $self.index = upper_bound;
-
+/* 
         let type_str = stringify!($typ);
         println!(
             "read_{} value: {:} new index {:}",
             type_str, value, $self.index
-        );
+        ); 
+*/
 
         value
     }};
@@ -201,13 +202,13 @@ impl ArchiveDescriptorReader {
     pub fn read_utf8_string(&mut self, stream: &[u8], string_len: usize) -> String {
         let upper_bound = self.index + string_len;
 
-        println!(
+/*         println!(
             "read_utf8_string lb: {:?} up: {:} ({:} bytes) from a {:} length array.",
             self.index,
             upper_bound,
             string_len,
             stream.len()
-        );
+        ); */
 
         let value = match str::from_utf8(&stream[self.index..upper_bound]) {
             Ok(v) => v.to_owned(),
@@ -216,10 +217,10 @@ impl ArchiveDescriptorReader {
 
         self.index = upper_bound;
 
-        println!(
+/*         println!(
             "read_utf8_string value: {:?} new index {:}",
             value, self.index
-        );
+        ); */
 
         value
     }
@@ -357,7 +358,7 @@ impl CentralDirectoryEnd {
             end_of_central_directory.write_u16(0);
         };
 
-        println!("EOCD\n {:#?}", self)
+        // println!("EOCD\n {:#?}", self)
     }
 }
 

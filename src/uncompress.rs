@@ -68,8 +68,10 @@ impl<R: Read + Seek> ArchiveReader<R> {
 
             //println!("val {:0X} ", val);
             if val == CENTRAL_DIRECTORY_END_SIGNATURE {
+              /*
                 let signature = stringify!(CENTRAL_DIRECTORY_END_SIGNATURE);
-              /*   println!("{signature} found at {}", position); */
+                 println!("{signature} found at {}", position); 
+                 */
                 break;
             }
             /*             if reader.read_u32::<LittleEndian>()? == CENTRAL_DIRECTORY_END_SIGNATURE {
